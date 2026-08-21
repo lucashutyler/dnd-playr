@@ -75,8 +75,8 @@ Do not add a `spell_slots` table. It's been considered; this is better.
 ### The second one
 
 **Characters are unowned.** The claim lives on the member (`members.character_id`), not
-on the character — so a character has no owner column, and *many members can point at one
-character*. That's not an edge case, it's the normal path: it's how phone-plus-tablet
+on the character — so a character has no owner column, and _many members can point at one
+character_. That's not an edge case, it's the normal path: it's how phone-plus-tablet
 works, and how you resume next week when your old token is long gone. Joining a room and
 claiming a character are two separate steps, and you can sit in a room claiming nothing.
 
@@ -143,4 +143,9 @@ the docs describe, so it's a deliberate choice rather than drift.
 
 ## Current state
 
-See [docs/todo.md](docs/todo.md). As of the last update: docs only, no code yet.
+See [docs/todo.md](docs/todo.md). **Phase 0 is done**: the scaffold builds, runs, lints,
+and tests. `/api/health` is the only route. There is no database, no websocket server, and
+no session logic yet — Phase 1 starts those.
+
+Note `.gitattributes` pins `eol=lf`. This machine has `core.autocrlf=true` globally, and
+without the override `prettier --check` fails on every file.

@@ -3,19 +3,27 @@
 Ordered so that something is usable at a real table as early as possible. Phase 4 is the
 first version worth actually playing with; everything after is polish and hardening.
 
-Status: **docs only, no code yet.**
+Status: **Phase 0 complete.** Scaffold runs, tests and lint pass, dev proxy verified.
 
 ---
 
-## Phase 0 — Scaffold
+## Phase 0 — Scaffold ✅
 
-- [ ] `npm init`, workspace layout (`server/`, `client/`, `docs/`, `data/`)
-- [ ] Fastify server, health route, `.env` handling (`PORT`, `DB_PATH`)
-- [ ] Vite + Vue 3 app, dev proxy for `/api` and `/ws`
-- [ ] `npm run dev` runs both concurrently
-- [ ] ESLint + Prettier, vitest wired up
-- [ ] `.gitignore` (`node_modules`, `data/`, `dist`, `.env`)
-- [ ] `npm run build` emits client into `server/public`; `npm start` serves it
+- [x] Single root `package.json` — no npm workspaces, one install and one lockfile.
+      Layout: `server/`, `client/`, `docs/`, `data/`
+- [x] Fastify server with `/api/health`; config in `server/config.js`, every value
+      defaulted so `.env` stays optional (`node --env-file-if-exists`, no dotenv dep)
+- [x] Vite + Vue 3, dev proxy for `/api` and `/ws`, `host: true` so a real phone on the
+      LAN can open the dev build
+- [x] `npm run dev` runs both under `concurrently`
+- [x] ESLint flat config + Prettier + vitest; a smoke test covers health and the API 404
+- [x] `.gitignore`, plus `.gitattributes` pinning `eol=lf` — the machine has
+      `core.autocrlf=true` globally, which otherwise breaks `prettier --check`
+- [x] `npm run build` emits to `server/public`; `npm start` serves API, static assets,
+      and an SPA fallback from one process
+
+Design tokens and the dark-mode palette landed here too, since the landing screen needed
+them — see `client/src/styles/tokens.css`.
 
 ## Phase 1 — Rooms and joining
 
@@ -56,7 +64,7 @@ Status: **docs only, no code yet.**
 - [ ] Resource tracks: add / rename / set max / spend / restore / reorder
 - [ ] Short rest and long rest buttons — reset tracks by `resets_on`
 
-## Phase 4 — The enemy ledger ← *first genuinely usable build*
+## Phase 4 — The enemy ledger ← _first genuinely usable build_
 
 - [ ] Add enemy by free-text label, from any player
 - [ ] Log damage to an enemy; attributed to the logging member via `events`
@@ -80,7 +88,7 @@ Status: **docs only, no code yet.**
 - [ ] Set / change / clear room passphrase — anyone in the room can, no host gate
 - [ ] Lock room toggle
 - [ ] Soft-delete a room: archived and restorable by code, not destroyed. This one earns
-      a typed confirmation *and* stays reversible
+      a typed confirmation _and_ stays reversible
 - [ ] Rate limits: join attempts, event floods per socket
 - [ ] Payload validation on every intent; cap string lengths and array sizes
 - [ ] Prune `events` beyond N per session, or roll them up — decide before it matters
@@ -119,12 +127,12 @@ Worth answering before the phase that depends on them.
 
 1. **Damage attribution granularity.** Per-player totals, or full per-hit history? The
    `events` table supports both; the question is what the UI shows. Leaning: totals in
-   the list, history on tap. *(needed by Phase 4)*
+   the list, history on tap. _(needed by Phase 4)_
 2. **Healing enemies.** Monsters do get healed sometimes. A negative damage entry handles
    it and keeps the tally honest — but does the UI expose it, or is it an edge case that
-   free-text notes can absorb? *(needed by Phase 4)*
+   free-text notes can absorb? _(needed by Phase 4)_
 3. **Encounter archiving.** Does "new encounter" hard-delete enemies or soft-archive them?
-   Soft is barely more work and makes the recap view free later. *(needed by Phase 4)*
+   Soft is barely more work and makes the recap view free later. _(needed by Phase 4)_
 4. **Room lifetime.** README promises "forever." Does that survive a year of abandoned
    test rooms? Probably needs a cleanup pass for rooms that were never actually used —
-   never touched after creation, say. *(needed by Phase 7)*
+   never touched after creation, say. _(needed by Phase 7)_

@@ -14,7 +14,7 @@ inverts that. The players do the bookkeeping, and the DM doesn't have to touch a
 That inversion produces the one design decision the rest of the app hangs off:
 
 > **Players don't know a monster's max HP.** So we don't track HP for enemies — we track
-> a *damage tally*. "Ogre: 32 dealt." Counting up, not down. No max-HP field, ever.
+> a _damage tally_. "Ogre: 32 dealt." Counting up, not down. No max-HP field, ever.
 
 This is simpler than what most trackers do, and it's why they fight you when you try to
 use them this way.
@@ -37,7 +37,7 @@ use them this way.
 
 No dice roller. No character sheet. No SRD monster database. No maps, no tokens, no
 initiative automation, no chat, no DM screen. If you want those, use Roll20 or Avrae —
-this is the thing you keep open *next to* the game, not the thing you play the game in.
+this is the thing you keep open _next to_ the game, not the thing you play the game in.
 
 ## Joining
 
@@ -102,14 +102,14 @@ copying that file.
 
 Chosen for "one person can hold all of this in their head":
 
-| Piece | Choice | Why |
-|---|---|---|
-| Backend | Node + Fastify | Small, fast, good websocket story |
-| Realtime | `ws` | Raw websockets. No Socket.IO, no rooms abstraction we don't need |
-| Storage | SQLite (`better-sqlite3`) | One file. Synchronous. Zero ops. Lasts forever |
-| Frontend | Vue 3 + Vite, `<script setup>` | Reactivity is the whole app |
-| State | One composable, no Pinia | Server is authoritative; the client is a view of it |
-| Styling | Plain CSS + custom properties | Mobile-first, hand-tuned, no framework |
+| Piece    | Choice                         | Why                                                              |
+| -------- | ------------------------------ | ---------------------------------------------------------------- |
+| Backend  | Node + Fastify                 | Small, fast, good websocket story                                |
+| Realtime | `ws`                           | Raw websockets. No Socket.IO, no rooms abstraction we don't need |
+| Storage  | SQLite (`better-sqlite3`)      | One file. Synchronous. Zero ops. Lasts forever                   |
+| Frontend | Vue 3 + Vite, `<script setup>` | Reactivity is the whole app                                      |
+| State    | One composable, no Pinia       | Server is authoritative; the client is a view of it              |
+| Styling  | Plain CSS + custom properties  | Mobile-first, hand-tuned, no framework                           |
 
 Notably absent: Tailwind, a component library, an ORM, Redux-anything, Docker. If one of
 those earns its way in later, fine — but it has to earn it.
