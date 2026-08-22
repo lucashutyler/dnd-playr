@@ -21,4 +21,10 @@ export default {
     // delta and enemyId are what the history read model queries on.
     return { enemyId: enemy.id, label: enemy.label, delta, total }
   },
+
+  undo({ db, session, logged }) {
+    const enemy = requireEnemy(db, session.id, logged.enemyId)
+    // The tally is never clamped, so subtracting the entry lands exactly.
+    return { total: applyDelta(db, enemy, -logged.delta) }
+  },
 }

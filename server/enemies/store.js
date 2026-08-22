@@ -47,6 +47,10 @@ export function applyDelta(db, enemy, delta) {
  * Every hit on every enemy in this room, oldest first, read straight out of
  * the event log. Attribution lives there and nowhere else, so the tally and
  * the history cannot drift apart.
+ *
+ * Undone hits are skipped. The event stays in the log — nothing is ever
+ * rewritten — but a mis-tap that has been taken back should not sit in the
+ * history arguing with the number above it.
  */
 export function hitsBySession(db, sessionId) {
   const rows = db
@@ -59,9 +63,14 @@ export function hitsBySession(db, sessionId) {
        FROM events e
        WHERE e.session_id = ?
          AND e.type IN ('enemy.damage', 'enemy.heal')
+         AND e.id NOT IN (
+           SELECT json_extract(u.payload, '$.revertedEventId')
+           FROM events u
+           WHERE u.session_id = ? AND u.type = 'history.undo'
+         )
        ORDER BY e.id`,
     )
-    .all(sessionId)
+    .all(sessionId, sessionId)
 
   const byEnemy = new Map()
   for (const row of rows) {

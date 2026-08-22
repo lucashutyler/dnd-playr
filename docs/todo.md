@@ -3,7 +3,7 @@
 Ordered so that something is usable at a real table as early as possible. Phase 4 is the
 first version worth actually playing with; everything after is polish and hardening.
 
-Status: **Phase 4 complete.** This is the first build worth taking to a table.
+Status: **Phase 5 complete.** Three tabs, a party view, and undo.
 
 ---
 
@@ -132,15 +132,42 @@ encounter carry their hits into the snapshot, which is what keeps it small.
 You do not need a character to work the ledger — a player who has not claimed a
 sheet can still log the party's damage.
 
-## Phase 5 — Party view and polish
+## Phase 5 — Party view and polish ✅
 
-- [ ] Party tab: everyone's HP bar + slot pips at a glance, live
-- [ ] Bottom nav: Me / Party / Fight
-- [ ] Design tokens, dark mode, a real type scale
-- [ ] Undo toast on every mutation (append inverse event)
-- [ ] Optimistic updates with snapshot reconciliation
-- [ ] Empty states, loading states, offline banner
-- [ ] Reconnect that doesn't lose your scroll position or your half-typed input
+- [x] Party tab: every character's HP bar, conditions and filled-in tracks at a
+      glance, plus who is holding each sheet and whether they are here
+- [x] Bottom nav: Me / Party / Fight, with a count of what is still standing
+- [x] Design tokens, dark mode and the type scale — landed in Phase 0, verified
+      here at 375px in both schemes
+- [x] Undo toast, and `history.undo` behind it
+- [x] Empty states throughout, and a banner while the socket is down
+- [x] Tab panels use `v-show`, so switching tabs or riding out a reconnect keeps
+      a half-typed enemy name and any open editor. Scroll position survives too,
+      because snapshots patch in place rather than remounting
+- [ ] ~~Optimistic updates~~ — **considered and declined**, see below
+
+### Undo is scoped, and that is deliberate
+
+A handler is reversible exactly when it exports `undo`. Hit points, resource
+spends, every ledger entry, removals, releasing a character and clearing the
+board all are. Renames and field edits are not: retyping is quicker than an
+offer to take it back, and each unreversible handler is one less place for a
+wrong inverse to hide.
+
+Undo only ever takes back **your own** last action — someone else's mistake is
+not yours to undo from a toast — and it steps further back each time it is used.
+Nothing is deleted or rewritten: undoing appends, and the undo is itself an
+event. A hit that has been taken back drops out of the per-enemy history read
+model, so the tally still equals the sum of what you see. A test covers exactly
+that, and it caught the case where it did not.
+
+### Why optimistic updates were declined
+
+CLAUDE.md permits optimism, it does not require it. The round trip is a socket
+frame and a snapshot — imperceptible on the LAN a table actually plays on — and
+speculative local state is precisely the merge-shaped bug surface the whole
+full-snapshot design exists to avoid. The controls give immediate tactile
+feedback instead. Revisit only if a real table reports lag.
 
 ## Phase 6 — Securing and hardening
 

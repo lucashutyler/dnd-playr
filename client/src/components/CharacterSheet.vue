@@ -102,7 +102,7 @@ function removeCondition(name) {
       <button type="button" @click="takeRest('long')">Long rest</button>
     </section>
 
-    <button type="button" class="release" @click="releaseCharacter">
+    <button type="button" class="release" @click="releaseCharacter(character.name)">
       Put {{ character.name }} down
     </button>
   </section>

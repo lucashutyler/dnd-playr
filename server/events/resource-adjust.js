@@ -28,6 +28,21 @@ export default {
     db.prepare('UPDATE resources SET current = ? WHERE id = ?').run(current, resource.id)
     touchCharacter(db, character.id)
 
-    return { characterId: character.id, resourceId: resource.id, delta: payload.delta, current }
+    return {
+      characterId: character.id,
+      resourceId: resource.id,
+      delta: payload.delta,
+      current,
+      // Clamping means -delta would not always land back here.
+      previousCurrent: resource.current,
+    }
+  },
+
+  undo({ db, logged }) {
+    db.prepare('UPDATE resources SET current = ? WHERE id = ?').run(
+      logged.previousCurrent,
+      logged.resourceId,
+    )
+    return { current: logged.previousCurrent }
   },
 }

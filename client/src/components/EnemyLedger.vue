@@ -25,6 +25,7 @@ const newLabel = ref('')
 const newInput = ref(null)
 
 const anyLive = computed(() => enemies.value.length > 0)
+const standing = computed(() => enemies.value.filter((e) => e.status === 'active').length)
 
 function toggle(enemy) {
   openId.value = openId.value === enemy.id ? null : enemy.id
@@ -38,8 +39,8 @@ function clean() {
 
 function hit(enemy, direction) {
   const n = clean()
-  if (direction === 'damage') damageEnemy(enemy.id, n)
-  else healEnemy(enemy.id, n)
+  if (direction === 'damage') damageEnemy(enemy.id, n, enemy.label)
+  else healEnemy(enemy.id, n, enemy.label)
 }
 
 /** Who has contributed what, before the blow-by-blow. */
@@ -90,7 +91,7 @@ function move(enemy, by) {
 <template>
   <section class="ledger">
     <header class="top">
-      <h2 class="legend">The fight</h2>
+      <h2 class="legend">{{ standing }} still standing</h2>
       <button v-if="anyLive" type="button" class="wipe" @click="newEncounter()">
         New encounter
       </button>
@@ -179,20 +180,30 @@ function move(enemy, by) {
             <button
               type="button"
               @click="
-                updateEnemy(e.id, { status: e.status === 'defeated' ? 'active' : 'defeated' })
+                updateEnemy(
+                  e.id,
+                  { status: e.status === 'defeated' ? 'active' : 'defeated' },
+                  e.status === 'defeated' ? e.label + ' back up' : e.label + ' went down',
+                )
               "
             >
               {{ e.status === 'defeated' ? 'Back up' : 'Down' }}
             </button>
             <button
               type="button"
-              @click="updateEnemy(e.id, { status: e.status === 'fled' ? 'active' : 'fled' })"
+              @click="
+                updateEnemy(
+                  e.id,
+                  { status: e.status === 'fled' ? 'active' : 'fled' },
+                  e.status === 'fled' ? e.label + ' returned' : e.label + ' fled',
+                )
+              "
             >
               {{ e.status === 'fled' ? 'Returned' : 'Fled' }}
             </button>
             <button type="button" @click="move(e, -1)">Up</button>
             <button type="button" @click="move(e, 1)">Down</button>
-            <button type="button" class="danger" @click="removeEnemy(e.id)">Remove</button>
+            <button type="button" class="danger" @click="removeEnemy(e.id, e.label)">Remove</button>
           </div>
         </div>
       </li>
@@ -215,7 +226,8 @@ function move(enemy, by) {
 
 <style scoped>
 .ledger {
-  margin-top: var(--s-6);
+  display: flex;
+  flex-direction: column;
 }
 
 .top {

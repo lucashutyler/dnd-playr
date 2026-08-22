@@ -34,6 +34,20 @@ export default {
       amount: payload.amount,
       hpCurrent,
       clearedDeathSaves: revived,
+      // Healing is capped, so how much actually landed is not derivable later.
+      previousCurrent: character.hp_current,
+      previousDeathSaves: {
+        successes: character.death_success,
+        failures: character.death_failure,
+      },
     }
+  },
+
+  undo({ db, logged }) {
+    const saves = logged.previousDeathSaves ?? { successes: 0, failures: 0 }
+    db.prepare(
+      'UPDATE characters SET hp_current = ?, death_success = ?, death_failure = ? WHERE id = ?',
+    ).run(logged.previousCurrent, saves.successes, saves.failures, logged.characterId)
+    return { hpCurrent: logged.previousCurrent }
   },
 }

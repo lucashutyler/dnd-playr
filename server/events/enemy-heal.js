@@ -20,4 +20,9 @@ export default {
 
     return { enemyId: enemy.id, label: enemy.label, delta, total }
   },
+
+  undo({ db, session, logged }) {
+    const enemy = requireEnemy(db, session.id, logged.enemyId)
+    return { total: applyDelta(db, enemy, -logged.delta) }
+  },
 }

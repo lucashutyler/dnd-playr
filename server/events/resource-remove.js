@@ -23,6 +23,23 @@ export default {
       current: resource.current,
       max: resource.max,
       resetsOn: resource.resets_on,
+      sort: resource.sort,
     }
+  },
+
+  undo({ db, logged }) {
+    db.prepare(
+      `INSERT INTO resources (id, character_id, name, current, max, resets_on, sort)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    ).run(
+      logged.resourceId,
+      logged.characterId,
+      logged.name,
+      logged.current,
+      logged.max,
+      logged.resetsOn,
+      logged.sort ?? 0,
+    )
+    return { resourceId: logged.resourceId }
   },
 }

@@ -28,6 +28,22 @@ export default {
     const status = payload.status ?? enemy.status
 
     db.prepare('UPDATE enemies SET label = ?, status = ? WHERE id = ?').run(label, status, enemy.id)
-    return { enemyId: enemy.id, label, status, previousStatus: enemy.status }
+    return {
+      enemyId: enemy.id,
+      label,
+      status,
+      previousLabel: enemy.label,
+      previousStatus: enemy.status,
+    }
+  },
+
+  undo({ db, session, logged }) {
+    const enemy = requireEnemy(db, session.id, logged.enemyId)
+    db.prepare('UPDATE enemies SET label = ?, status = ? WHERE id = ?').run(
+      logged.previousLabel ?? enemy.label,
+      logged.previousStatus ?? enemy.status,
+      enemy.id,
+    )
+    return { label: logged.previousLabel, status: logged.previousStatus }
   },
 }

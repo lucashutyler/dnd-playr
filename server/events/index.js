@@ -20,6 +20,7 @@ import enemyUpdate from './enemy-update.js'
 import enemyRemove from './enemy-remove.js'
 import enemyReorder from './enemy-reorder.js'
 import encounterNew from './encounter-new.js'
+import historyUndo from './history-undo.js'
 
 /**
  * Every mutation lives in a file here exporting { type, validate, apply }.
@@ -49,6 +50,7 @@ const handlers = [
   enemyRemove,
   enemyReorder,
   encounterNew,
+  historyUndo,
 ]
 
 export const eventHandlers = new Map(handlers.map((h) => [h.type, h]))

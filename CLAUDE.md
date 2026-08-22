@@ -136,6 +136,12 @@ shared timestamp is what groups a set of enemies into one encounter afterwards.
   and call intent functions on it. No prop-drilling of session state, no Pinia.
 - Styling is plain CSS in SFC `<style scoped>` blocks, using tokens from
   `client/styles/tokens.css`. No utility classes, no CSS-in-JS, no component library.
+- Prefer a CSS keyframe over Vue's `<Transition>` for anything that must not get
+  stuck. Transition drives its leave state from animation frames, and a backgrounded
+  tab suspends those — which is exactly what a phone does when you glance at a
+  message mid-combat. A wedged, half-faded toast over the controls is worse than no
+  animation at all.
+- Tab panels are `v-show`, not `v-if`. Unmounting throws away half-typed input.
 - Colors, spacing, radii, and type scale come from custom properties. If you're writing a
   raw hex or a raw `px` in a component, you probably want a token.
 
@@ -169,13 +175,17 @@ the docs describe, so it's a deliberate choice rather than drift.
 
 ## Current state
 
-See [docs/todo.md](docs/todo.md). **Phases 0 through 4 are done**: rooms, the realtime
-spine, characters, and the enemy ledger. Twenty-two event handlers live in
-`server/events/`. The app is usable at a real table now.
+See [docs/todo.md](docs/todo.md). **Phases 0 through 5 are done**: rooms, the realtime
+spine, characters, the enemy ledger, and the three-tab shell with undo. Twenty-three
+event handlers live in `server/events/`.
 
-Phase 5 is navigation and polish, and it has the one obvious debt to clear: the
-character sheet and the enemy ledger are stacked on a single scrolling page, because
-the Me / Party / Fight tabs are Phase 5's job rather than something to half-build early.
+**Undo is a handler capability, not a framework.** A mutation is reversible exactly
+when its file exports `undo({ db, session, member, logged })`, which is why several
+handlers log a `previous*` field they otherwise would not need — a clamped or absorbed
+change cannot be inverted from its result alone. `history.undo` walks the sender's own
+recent events, takes back the first reversible one it finds, and appends a record of
+having done so. Undone hits are filtered out of the enemy history read model so the
+tally still equals the sum of what is displayed.
 
 Two rules worth keeping that the code now depends on:
 

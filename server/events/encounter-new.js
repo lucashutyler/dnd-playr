@@ -24,4 +24,12 @@ export default {
     if (archived === 0) throw new IntentError('nothing_to_archive')
     return { archivedAt: at, count: archived }
   },
+
+  /** One timestamp marked them, so one timestamp brings them all back. */
+  undo({ db, session, logged }) {
+    const restored = db
+      .prepare('UPDATE enemies SET archived_at = NULL WHERE session_id = ? AND archived_at = ?')
+      .run(session.id, logged.archivedAt).changes
+    return { count: restored }
+  },
 }

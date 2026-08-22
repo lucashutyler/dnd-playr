@@ -29,4 +29,17 @@ export default {
 
     return { characterId: character.id, amount, absorbedByTemp: absorbed, hpCurrent, hpTemp }
   },
+
+  /** Put both pools back exactly where they were, temp included. */
+  undo({ db, logged }) {
+    const hpTemp = logged.hpTemp + logged.absorbedByTemp
+    const hpCurrent = logged.hpCurrent + (logged.amount - logged.absorbedByTemp)
+
+    db.prepare('UPDATE characters SET hp_current = ?, hp_temp = ? WHERE id = ?').run(
+      hpCurrent,
+      hpTemp,
+      logged.characterId,
+    )
+    return { hpCurrent, hpTemp }
+  },
 }

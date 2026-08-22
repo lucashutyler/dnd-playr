@@ -20,6 +20,9 @@ const RETRIES_BEFORE_TOKEN_CHECK = 3
 // second. Saying "reconnecting" that fast just makes the app look flaky, so the
 // badge waits to see whether it is a real outage.
 const RECONNECT_BADGE_DELAY_MS = 3_000
+// How long the undo offer stays on screen. Long enough to notice a mis-tap,
+// short enough not to sit over the thing you are looking at.
+const TOAST_MS = 6_000
 
 // Module scope on purpose: one session per tab, shared by every component.
 const token = ref(readStoredToken())
@@ -32,12 +35,17 @@ const status = ref('idle')
 const connection = ref('idle')
 const error = ref(null)
 const needsPassphrase = ref(false)
+const toast = ref(null)
 
 let socket = null
 let retries = 0
 let reconnectTimer = null
 let badgeTimer = null
+let toastTimer = null
 let deliberateClose = false
+let intentSeq = 0
+// Intents we sent that are still waiting on an ack, and what to say if it lands.
+const awaiting = new Map()
 
 function readStoredToken() {
   try {
@@ -115,8 +123,17 @@ function onMessage(event) {
     return
   }
 
-  if (message.type === 'snapshot') applySnapshot(message.snapshot)
-  else if (message.type === 'error') error.value = messageFor(message.error)
+  if (message.type === 'snapshot') {
+    applySnapshot(message.snapshot)
+  } else if (message.type === 'ack') {
+    // Only offer to take something back once the server says it happened.
+    const label = awaiting.get(message.id)
+    awaiting.delete(message.id)
+    if (label) showToast(label)
+  } else if (message.type === 'error') {
+    awaiting.delete(message.id)
+    error.value = messageFor(message.error)
+  }
 }
 
 function scheduleReconnect() {
@@ -196,11 +213,43 @@ function disconnect() {
   connection.value = 'idle'
 }
 
-/** Fire-and-forget. The snapshot that follows is the real confirmation. */
-function sendIntent(intent) {
+/**
+ * The snapshot that follows is the real confirmation. Pass `undoLabel` for the
+ * actions worth offering to take back; that carries an id so the ack can be
+ * matched, and everything else stays fire-and-forget.
+ */
+function sendIntent(intent, undoLabel = null) {
   if (socket?.readyState !== WebSocket.OPEN) return false
+
+  if (undoLabel) {
+    intentSeq += 1
+    const id = 'i' + intentSeq
+    awaiting.set(id, undoLabel)
+    socket.send(JSON.stringify({ ...intent, id }))
+    return true
+  }
+
   socket.send(JSON.stringify(intent))
   return true
+}
+
+function showToast(label) {
+  clearTimeout(toastTimer)
+  // A new action replaces the old offer, and undo always means "the last thing".
+  toast.value = { label }
+  toastTimer = setTimeout(() => {
+    toast.value = null
+  }, TOAST_MS)
+}
+
+function dismissToast() {
+  clearTimeout(toastTimer)
+  toast.value = null
+}
+
+function undoLast() {
+  dismissToast()
+  sendIntent({ type: 'history.undo' })
 }
 
 /* ---------------------------------------------------------------- actions -- */
@@ -295,6 +344,7 @@ async function joinRoom({ code, displayName = '', passphrase = '' } = {}) {
 /** Forgets this device's claim. The room and its characters are untouched. */
 function leave() {
   disconnect()
+  dismissToast()
   storeToken(null)
   session.value = null
   member.value = null
@@ -317,20 +367,25 @@ const renameRoom = (name) => sendIntent({ type: 'session.rename', name })
    back is the confirmation, and it is the only thing that changes state. */
 const createCharacter = (fields) => sendIntent({ type: 'character.create', ...fields })
 const claimCharacter = (characterId) => sendIntent({ type: 'character.claim', characterId })
-const releaseCharacter = () => sendIntent({ type: 'character.release' })
+const releaseCharacter = (name = 'character') =>
+  sendIntent({ type: 'character.release' }, 'Put down ' + name)
 const updateCharacter = (fields) => sendIntent({ type: 'character.update', ...fields })
 
-const damage = (amount) => sendIntent({ type: 'hp.damage', amount })
-const heal = (amount) => sendIntent({ type: 'hp.heal', amount })
+const damage = (amount) => sendIntent({ type: 'hp.damage', amount }, 'Took ' + amount + ' damage')
+const heal = (amount) => sendIntent({ type: 'hp.heal', amount }, 'Healed ' + amount)
 const setDeathSaves = (successes, failures) =>
   sendIntent({ type: 'death.set', successes, failures })
 
 const addResource = (fields) => sendIntent({ type: 'resource.add', ...fields })
-const adjustResource = (resourceId, delta) =>
-  sendIntent({ type: 'resource.adjust', resourceId, delta })
+const adjustResource = (resourceId, delta, name = 'track') =>
+  sendIntent(
+    { type: 'resource.adjust', resourceId, delta },
+    (delta < 0 ? 'Spent ' + -delta + ' ' : 'Restored ' + delta + ' ') + name,
+  )
 const updateResource = (resourceId, fields) =>
   sendIntent({ type: 'resource.update', resourceId, ...fields })
-const removeResource = (resourceId) => sendIntent({ type: 'resource.remove', resourceId })
+const removeResource = (resourceId, name = 'track') =>
+  sendIntent({ type: 'resource.remove', resourceId }, 'Removed ' + name)
 const reorderResources = (orderedIds) => sendIntent({ type: 'resource.reorder', orderedIds })
 
 const takeRest = (kind) => sendIntent({ type: 'rest.take', kind })
@@ -338,12 +393,16 @@ const takeRest = (kind) => sendIntent({ type: 'rest.take', kind })
 /* The enemy ledger. Damage counts up, healing counts down, and both are the
    same signed entry against a tally that never pretends to know a max. */
 const addEnemy = (label) => sendIntent({ type: 'enemy.add', label })
-const damageEnemy = (enemyId, amount) => sendIntent({ type: 'enemy.damage', enemyId, amount })
-const healEnemy = (enemyId, amount) => sendIntent({ type: 'enemy.heal', enemyId, amount })
-const updateEnemy = (enemyId, fields) => sendIntent({ type: 'enemy.update', enemyId, ...fields })
-const removeEnemy = (enemyId) => sendIntent({ type: 'enemy.remove', enemyId })
+const damageEnemy = (enemyId, amount, label = 'it') =>
+  sendIntent({ type: 'enemy.damage', enemyId, amount }, amount + ' damage to ' + label)
+const healEnemy = (enemyId, amount, label = 'it') =>
+  sendIntent({ type: 'enemy.heal', enemyId, amount }, label + ' healed ' + amount)
+const updateEnemy = (enemyId, fields, undoLabel = null) =>
+  sendIntent({ type: 'enemy.update', enemyId, ...fields }, undoLabel)
+const removeEnemy = (enemyId, label = 'enemy') =>
+  sendIntent({ type: 'enemy.remove', enemyId }, 'Removed ' + label)
 const reorderEnemies = (orderedIds) => sendIntent({ type: 'enemy.reorder', orderedIds })
-const newEncounter = () => sendIntent({ type: 'encounter.new' })
+const newEncounter = () => sendIntent({ type: 'encounter.new' }, 'Cleared the board')
 
 export function useSession() {
   return {
@@ -356,6 +415,7 @@ export function useSession() {
     connection: readonly(connection),
     error: readonly(error),
     needsPassphrase: readonly(needsPassphrase),
+    toast: readonly(toast),
 
     inRoom: computed(() => Boolean(session.value)),
     hasCharacter: computed(() => Boolean(member.value?.characterId)),
@@ -371,6 +431,8 @@ export function useSession() {
     joinRoom,
     leave,
     clearError,
+    dismissToast,
+    undoLast,
     renameMe,
     renameRoom,
     createCharacter,

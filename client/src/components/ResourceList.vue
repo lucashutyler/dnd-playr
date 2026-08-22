@@ -91,7 +91,7 @@ function commitAdd() {
               class="step"
               :disabled="r.current === 0"
               :aria-label="'Spend one ' + r.name"
-              @click="adjustResource(r.id, -1)"
+              @click="adjustResource(r.id, -1, r.name)"
             >
               −
             </button>
@@ -100,7 +100,7 @@ function commitAdd() {
               class="step"
               :disabled="r.max > 0 && r.current >= r.max"
               :aria-label="'Restore one ' + r.name"
-              @click="adjustResource(r.id, 1)"
+              @click="adjustResource(r.id, 1, r.name)"
             >
               +
             </button>
@@ -130,7 +130,9 @@ function commitAdd() {
             <button type="submit" class="save">Save</button>
             <button type="button" @click="move(r, -1)">Up</button>
             <button type="button" @click="move(r, 1)">Down</button>
-            <button type="button" class="danger" @click="removeResource(r.id)">Remove</button>
+            <button type="button" class="danger" @click="removeResource(r.id, r.name)">
+              Remove
+            </button>
             <button type="button" @click="editing = null">Cancel</button>
           </div>
         </form>

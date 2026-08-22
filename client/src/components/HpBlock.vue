@@ -210,6 +210,9 @@ function markDeath(kind, n) {
 
 .max,
 .max-edit {
+  /* Small-looking, but it is a real control and gets a real target. */
+  min-height: var(--tap);
+  padding-inline: var(--s-2);
   border: none;
   background: none;
   color: var(--c-text-dim);

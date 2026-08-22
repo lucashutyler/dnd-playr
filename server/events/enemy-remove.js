@@ -22,6 +22,25 @@ export default {
       label: enemy.label,
       damageTotal: enemy.damage_total,
       status: enemy.status,
+      sort: enemy.sort,
+      createdAt: enemy.created_at,
     }
+  },
+
+  undo({ db, session, logged }) {
+    db.prepare(
+      `INSERT INTO enemies (id, session_id, label, damage_total, status, sort, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    ).run(
+      logged.enemyId,
+      session.id,
+      logged.label,
+      logged.damageTotal,
+      logged.status,
+      logged.sort ?? 0,
+      logged.createdAt ?? new Date().toISOString(),
+    )
+    // Its hits were never deleted, so the history comes back with it.
+    return { enemyId: logged.enemyId }
   },
 }

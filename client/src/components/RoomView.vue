@@ -1,285 +1,204 @@
 <script setup>
-import { nextTick, ref } from 'vue'
-import AppButton from './AppButton.vue'
+import { computed, nextTick, ref } from 'vue'
+import BottomNav from './BottomNav.vue'
 import CharacterChooser from './CharacterChooser.vue'
 import CharacterSheet from './CharacterSheet.vue'
 import EnemyLedger from './EnemyLedger.vue'
+import PartyView from './PartyView.vue'
+import UndoToast from './UndoToast.vue'
 import { useSession } from '../composables/useSession.js'
 
-const {
-  session,
-  member,
-  members,
-  characters,
-  connection,
-  live,
-  myCharacter,
-  leave,
-  renameMe,
-  renameRoom,
-} = useSession()
+const { session, enemies, connection, live, myCharacter, renameRoom } = useSession()
 
-// 'room' | 'me' | null
-const editing = ref(null)
+const tab = ref('me')
+
+const editingName = ref(false)
 const draft = ref('')
-const inputEl = ref(null)
+const nameInput = ref(null)
 
-/** Who each member is playing, so the roster reads as the party. */
-function characterNameFor(m) {
-  if (!m.characterId) return 'no character'
-  return characters.value.find((c) => c.id === m.characterId)?.name ?? ''
-}
+const showCode = ref(false)
 
-const LABELS = {
-  open: 'live',
-  connecting: 'connecting',
-  reconnecting: 'reconnecting',
-  idle: 'offline',
-}
+const offline = computed(() => connection.value !== 'open')
+const activeEnemies = computed(() => enemies.value.filter((e) => e.status === 'active').length)
 
-async function edit(what, current) {
+async function editName() {
   if (!live.value) return
-  editing.value = what
-  draft.value = current
+  draft.value = session.value.name
+  editingName.value = true
   await nextTick()
-  inputEl.value?.focus()
-  inputEl.value?.select()
+  nameInput.value?.focus()
+  nameInput.value?.select()
 }
 
-function commit() {
-  if (editing.value === 'room') renameRoom(draft.value)
-  else if (editing.value === 'me') renameMe(draft.value)
-  editing.value = null
+function commitName() {
+  editingName.value = false
+  if (draft.value.trim() !== session.value.name) renameRoom(draft.value)
 }
 </script>
 
 <template>
-  <main class="page">
-    <header class="head">
+  <div class="room">
+    <header class="bar">
       <input
-        v-if="editing === 'room'"
-        ref="inputEl"
+        v-if="editingName"
+        ref="nameInput"
         v-model="draft"
-        class="edit edit--name"
+        class="name-edit"
         maxlength="60"
         aria-label="Room name"
-        @keyup.enter="commit"
-        @keyup.escape="editing = null"
-        @blur="commit"
+        @keyup.enter="commitName"
+        @keyup.escape="editingName = false"
+        @blur="commitName"
       />
-      <button v-else class="name" type="button" @click="edit('room', session.name)">
+      <button v-else class="name" type="button" @click="editName">
         {{ session.name || 'Untitled room' }}
       </button>
 
-      <p class="code" :aria-label="'Room code ' + session.code.split('').join(' ')">
+      <button
+        class="code"
+        type="button"
+        :aria-expanded="showCode"
+        aria-label="Room code"
+        @click="showCode = !showCode"
+      >
+        <i class="dot" :class="connection" aria-hidden="true" />
         {{ session.code }}
-      </p>
-
-      <p class="pill" :data-state="connection">
-        <span class="dot" aria-hidden="true" />
-        {{ LABELS[connection] }}
-      </p>
+      </button>
     </header>
 
-    <CharacterSheet v-if="myCharacter" :character="myCharacter" />
-    <CharacterChooser v-else />
+    <p v-if="showCode" class="share">
+      Anyone can join at this room's code:
+      <strong>{{ session.code }}</strong>
+      <template v-if="session.hasPassphrase"> — they will need the passphrase too.</template>
+    </p>
 
-    <EnemyLedger />
+    <!-- Only once it has actually been down a moment; see the reconnect delay. -->
+    <p v-if="offline" class="banner" role="status">
+      {{ connection === 'reconnecting' ? 'Reconnecting…' : 'Connecting…' }}
+      Changes will not send until this clears.
+    </p>
 
-    <section class="roster">
-      <h2 class="legend">At the table</h2>
-      <ul>
-        <li v-for="m in members" :key="m.id" :class="{ off: !m.online }">
-          <span class="dot" :class="{ on: m.online }" aria-hidden="true" />
+    <!--
+      v-show rather than v-if: switching tabs must not throw away a half-typed
+      enemy name or an open editor. Three small lists cost nothing to keep
+      mounted, and it means a reconnect cannot lose them either.
+    -->
+    <main class="content">
+      <section v-show="tab === 'me'">
+        <CharacterSheet v-if="myCharacter" :character="myCharacter" />
+        <CharacterChooser v-else />
+      </section>
 
-          <input
-            v-if="editing === 'me' && m.id === member.id"
-            ref="inputEl"
-            v-model="draft"
-            class="edit"
-            maxlength="40"
-            aria-label="Your name"
-            @keyup.enter="commit"
-            @keyup.escape="editing = null"
-            @blur="commit"
-          />
-          <button
-            v-else-if="m.id === member.id"
-            class="who who--me"
-            type="button"
-            @click="edit('me', m.displayName)"
-          >
-            {{ m.displayName || 'Unnamed' }} <span class="tag">you</span>
-          </button>
-          <span v-else class="who">{{ m.displayName || 'Unnamed' }}</span>
+      <section v-show="tab === 'party'">
+        <PartyView />
+      </section>
 
-          <span class="claim">{{ characterNameFor(m) }}</span>
-        </li>
-      </ul>
-    </section>
+      <section v-show="tab === 'fight'">
+        <EnemyLedger />
+      </section>
+    </main>
 
-    <footer class="foot">
-      <AppButton variant="ghost" @click="leave">Leave this room on this device</AppButton>
-    </footer>
-  </main>
+    <UndoToast />
+    <BottomNav v-model="tab" :fight-count="activeEnemies" />
+  </div>
 </template>
 
 <style scoped>
-.page {
-  display: flex;
-  flex-direction: column;
-  min-height: 100dvh;
+.room {
   max-width: var(--page-max);
   margin-inline: auto;
-  padding: var(--s-5) var(--s-4);
+  /* Clear of the fixed nav, so the last control is never trapped under it. */
+  padding: var(--s-3) var(--s-4) calc(4.5rem + env(safe-area-inset-bottom));
 }
 
-.head {
+.bar {
   display: flex;
-  flex-direction: column;
   align-items: center;
-  gap: var(--s-1);
+  justify-content: space-between;
+  gap: var(--s-2);
 }
 
-.name {
+.name,
+.name-edit {
+  flex: 1;
+  min-width: 0;
   min-height: var(--tap);
   padding-inline: var(--s-2);
   border: none;
   border-radius: var(--r-1);
   background: none;
   font-family: var(--f-display);
-  font-size: var(--t-xl);
+  font-size: var(--t-lg);
   font-weight: 600;
+  text-align: left;
 }
 
-.name:hover {
-  background: var(--c-surface-2);
+.name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.name-edit {
+  border: 1px solid var(--c-accent);
+  background: var(--c-bg);
 }
 
 .code {
-  color: var(--c-accent);
-  font-family: var(--f-mono);
-  font-size: var(--t-2xl);
-  font-weight: 700;
-  letter-spacing: 0.3em;
-  /* The letter-spacing pads the right edge; pull it back to stay centred. */
-  text-indent: 0.3em;
-}
-
-.pill {
   display: inline-flex;
   align-items: center;
+  flex-shrink: 0;
   gap: var(--s-2);
-  margin-top: var(--s-2);
-  padding: var(--s-1) var(--s-3);
+  min-height: var(--tap);
+  padding-inline: var(--s-3);
+  border: 1px solid var(--c-border);
   border-radius: var(--r-pill);
-  background: var(--c-surface-2);
-  color: var(--c-text-dim);
-  font-size: var(--t-xs);
+  background: var(--c-surface);
+  color: var(--c-accent);
+  font-family: var(--f-mono);
+  font-size: var(--t-sm);
+  font-weight: 700;
+  letter-spacing: 0.15em;
 }
 
 .dot {
-  width: 0.5rem;
-  height: 0.5rem;
+  width: 0.45rem;
+  height: 0.45rem;
   border-radius: 50%;
   background: var(--c-text-dim);
   opacity: 0.5;
 }
 
-.pill[data-state='open'] .dot,
-.dot.on {
+.dot.open {
   background: var(--c-ok);
   opacity: 1;
 }
 
-.pill[data-state='reconnecting'] .dot {
+.dot.reconnecting {
   background: var(--c-accent);
   opacity: 1;
 }
 
-.roster {
-  margin-top: var(--s-6);
-}
-
-.legend {
-  color: var(--c-text-dim);
-  font-size: var(--t-sm);
-  font-weight: 500;
-}
-
-ul {
+.share {
   margin-top: var(--s-2);
-  border: 1px solid var(--c-border);
-  border-radius: var(--r-2);
-  background: var(--c-surface);
-  list-style: none;
-}
-
-li {
-  display: flex;
-  align-items: center;
-  gap: var(--s-3);
-  min-height: var(--tap);
   padding: var(--s-2) var(--s-3);
-}
-
-li + li {
-  border-top: 1px solid var(--c-border);
-}
-
-li.off .who {
-  color: var(--c-text-dim);
-}
-
-.who {
-  flex: 1;
-  min-height: var(--tap);
-  display: flex;
-  align-items: center;
-  gap: var(--s-2);
-  padding: 0;
-  border: none;
-  background: none;
-  text-align: left;
-}
-
-.who--me {
-  font-weight: 600;
-}
-
-.tag {
-  padding: 0 var(--s-2);
-  border-radius: var(--r-pill);
+  border-radius: var(--r-2);
   background: var(--c-surface-2);
   color: var(--c-text-dim);
   font-size: var(--t-xs);
-  font-weight: 500;
+  text-wrap: pretty;
 }
 
-.claim {
+.banner {
+  margin-top: var(--s-2);
+  padding: var(--s-2) var(--s-3);
+  border-radius: var(--r-2);
+  background: var(--c-surface-2);
   color: var(--c-text-dim);
   font-size: var(--t-xs);
 }
 
-.edit {
-  flex: 1;
-  min-height: var(--tap);
-  padding: var(--s-1) var(--s-2);
-  border: 1px solid var(--c-accent);
-  border-radius: var(--r-1);
-  background: var(--c-bg);
-  font-size: var(--t-md);
-}
-
-.edit--name {
-  font-family: var(--f-display);
-  font-size: var(--t-xl);
-  font-weight: 600;
-  text-align: center;
-}
-
-.foot {
-  margin-top: var(--s-6);
-  padding-bottom: var(--s-2);
+.content {
+  margin-top: var(--s-3);
 }
 </style>
