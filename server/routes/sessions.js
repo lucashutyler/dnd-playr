@@ -6,6 +6,7 @@ import {
   verifyPassphrase,
 } from '../auth/tokens.js'
 import { allocateCode, isValidCode, normalizeCode } from '../rooms/code.js'
+import { CLASS_NAMES } from '../characters/presets.js'
 import {
   countMembers,
   createMember,
@@ -43,6 +44,9 @@ const joinBody = {
 
 export default async function sessionRoutes(app) {
   const { db } = app
+
+  // The class list has one home, on the server, so the picker cannot drift.
+  app.get('/api/meta', async () => ({ classes: CLASS_NAMES }))
 
   /** Creates a room and seats the creator. No host role — see CLAUDE.md. */
   app.post(

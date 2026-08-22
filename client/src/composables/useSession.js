@@ -16,6 +16,10 @@ const RETRY_MAX_MS = 15_000
 // After this many failures with no successful open, check whether the token
 // itself died rather than reconnecting into a wall forever.
 const RETRIES_BEFORE_TOKEN_CHECK = 3
+// Most drops are a server restart or a tunnel, and are over in well under a
+// second. Saying "reconnecting" that fast just makes the app look flaky, so the
+// badge waits to see whether it is a real outage.
+const RECONNECT_BADGE_DELAY_MS = 3_000
 
 // Module scope on purpose: one session per tab, shared by every component.
 const token = ref(readStoredToken())
@@ -32,6 +36,7 @@ const needsPassphrase = ref(false)
 let socket = null
 let retries = 0
 let reconnectTimer = null
+let badgeTimer = null
 let deliberateClose = false
 
 function readStoredToken() {
@@ -147,13 +152,16 @@ function connect() {
   )
     return
 
-  connection.value = retries === 0 ? 'connecting' : 'reconnecting'
+  // Only the very first attempt announces itself. A retry leaves the badge
+  // alone and lets the delay below decide whether this is worth mentioning.
+  if (connection.value === 'idle') connection.value = 'connecting'
   deliberateClose = false
 
   socket = new WebSocket(socketUrl())
 
   socket.addEventListener('open', () => {
     retries = 0
+    clearTimeout(badgeTimer)
     connection.value = 'open'
     error.value = null
   })
@@ -163,10 +171,14 @@ function connect() {
   socket.addEventListener('close', () => {
     socket = null
     if (deliberateClose || !token.value) {
+      clearTimeout(badgeTimer)
       connection.value = 'idle'
       return
     }
-    connection.value = 'reconnecting'
+    clearTimeout(badgeTimer)
+    badgeTimer = setTimeout(() => {
+      if (connection.value !== 'open') connection.value = 'reconnecting'
+    }, RECONNECT_BADGE_DELAY_MS)
     scheduleReconnect()
   })
 
@@ -177,6 +189,7 @@ function connect() {
 function disconnect() {
   deliberateClose = true
   clearTimeout(reconnectTimer)
+  clearTimeout(badgeTimer)
   retries = 0
   socket?.close()
   socket = null
@@ -300,6 +313,28 @@ function clearError() {
 const renameMe = (displayName) => sendIntent({ type: 'member.rename', displayName })
 const renameRoom = (name) => sendIntent({ type: 'session.rename', name })
 
+/* Characters. Every one of these is fire-and-forget: the snapshot that comes
+   back is the confirmation, and it is the only thing that changes state. */
+const createCharacter = (fields) => sendIntent({ type: 'character.create', ...fields })
+const claimCharacter = (characterId) => sendIntent({ type: 'character.claim', characterId })
+const releaseCharacter = () => sendIntent({ type: 'character.release' })
+const updateCharacter = (fields) => sendIntent({ type: 'character.update', ...fields })
+
+const damage = (amount) => sendIntent({ type: 'hp.damage', amount })
+const heal = (amount) => sendIntent({ type: 'hp.heal', amount })
+const setDeathSaves = (successes, failures) =>
+  sendIntent({ type: 'death.set', successes, failures })
+
+const addResource = (fields) => sendIntent({ type: 'resource.add', ...fields })
+const adjustResource = (resourceId, delta) =>
+  sendIntent({ type: 'resource.adjust', resourceId, delta })
+const updateResource = (resourceId, fields) =>
+  sendIntent({ type: 'resource.update', resourceId, ...fields })
+const removeResource = (resourceId) => sendIntent({ type: 'resource.remove', resourceId })
+const reorderResources = (orderedIds) => sendIntent({ type: 'resource.reorder', orderedIds })
+
+const takeRest = (kind) => sendIntent({ type: 'rest.take', kind })
+
 export function useSession() {
   return {
     session: readonly(session),
@@ -314,6 +349,9 @@ export function useSession() {
 
     inRoom: computed(() => Boolean(session.value)),
     hasCharacter: computed(() => Boolean(member.value?.characterId)),
+    myCharacter: computed(
+      () => characters.value.find((c) => c.id === member.value?.characterId) ?? null,
+    ),
     busy: computed(() => status.value === 'loading'),
     live: computed(() => connection.value === 'open'),
     onlineCount: computed(() => members.value.filter((m) => m.online).length),
@@ -325,5 +363,18 @@ export function useSession() {
     clearError,
     renameMe,
     renameRoom,
+    createCharacter,
+    claimCharacter,
+    releaseCharacter,
+    updateCharacter,
+    damage,
+    heal,
+    setDeathSaves,
+    addResource,
+    adjustResource,
+    updateResource,
+    removeResource,
+    reorderResources,
+    takeRest,
   }
 }

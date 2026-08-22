@@ -3,8 +3,11 @@ import { createRoom, makeLiveApp, wsClient } from '../test-helpers.js'
 
 let ctx
 
+const GRACE_MS = 150
+
 beforeEach(async () => {
-  ctx = await makeLiveApp()
+  // The real grace is a minute; tests would rather not wait for it.
+  ctx = await makeLiveApp({ presenceGraceMs: GRACE_MS })
 })
 afterEach(async () => {
   await ctx.close()
@@ -156,11 +159,16 @@ describe('broadcast isolation', () => {
 })
 
 describe('presence', () => {
-  it('is derived from live sockets and never stored', async () => {
+  async function twoSeats() {
     const room = await createRoom(ctx.app)
     const joined = await ctx.app
       .inject({ method: 'POST', url: `/api/sessions/${room.session.code}/join`, payload: {} })
       .then((r) => r.json())
+    return { room, joined }
+  }
+
+  it('is derived from live sockets and never stored', async () => {
+    const { room, joined } = await twoSeats()
 
     const a = await connected(room.token)
     expect(a.first.snapshot.members.filter((m) => m.online)).toHaveLength(1)
@@ -172,12 +180,6 @@ describe('presence', () => {
     const arrival = await a.client.next()
     expect(arrival.snapshot.members.filter((m) => m.online)).toHaveLength(2)
 
-    await b.client.close()
-
-    const departure = await a.client.next()
-    expect(departure.snapshot.members.filter((m) => m.online)).toHaveLength(1)
-    expect(departure.snapshot.members).toHaveLength(2) // still seated, just offline
-
     // Nothing about presence is in the database.
     const columns = ctx.db
       .prepare('PRAGMA table_info(members)')
@@ -186,6 +188,73 @@ describe('presence', () => {
     expect(columns).not.toContain('online')
 
     await a.client.close()
+    await b.client.close()
+  })
+
+  it('holds a member on the roster through a brief drop', async () => {
+    const { room, joined } = await twoSeats()
+
+    const a = await connected(room.token)
+    const b = await connected(joined.token)
+    await a.client.next() // b arriving
+
+    await b.client.close()
+
+    // The close broadcast still shows them present: a phone that locked for a
+    // moment should not vanish from the table.
+    const justAfter = await a.client.next()
+    expect(justAfter.snapshot.members.filter((m) => m.online)).toHaveLength(2)
+
+    // Only once the grace runs out does the roster admit they are gone, and it
+    // says so on its own without anyone touching anything.
+    const expired = await a.client.next(GRACE_MS * 8)
+    expect(expired.snapshot.members.filter((m) => m.online)).toHaveLength(1)
+    expect(expired.snapshot.members).toHaveLength(2) // still seated, just offline
+
+    await a.client.close()
+  })
+
+  it('treats a reconnect inside the grace as never having left', async () => {
+    const { room, joined } = await twoSeats()
+
+    const a = await connected(room.token)
+    const b = await connected(joined.token)
+    await a.client.next() // b arriving
+
+    await b.client.close()
+    await a.client.next() // still present
+
+    const bAgain = await connected(joined.token)
+    expect(bAgain.first.snapshot.members.every((m) => m.online)).toBe(true)
+
+    // No later frame demotes them, because the grace was cancelled on reconnect.
+    await new Promise((r) => setTimeout(r, GRACE_MS * 3))
+    const frames = a.client.drain()
+    for (const frame of frames) {
+      expect(frame.snapshot.members.filter((m) => m.online)).toHaveLength(2)
+    }
+
+    await a.client.close()
+    await bAgain.client.close()
+  })
+
+  it('does not start a grace while another device of the same member is up', async () => {
+    const room = await createRoom(ctx.app)
+
+    const phone = await connected(room.token)
+    const tablet = await connected(room.token)
+    await phone.client.next() // tablet arriving
+
+    await phone.client.close()
+
+    const after = await tablet.client.next()
+    expect(after.snapshot.members[0].online).toBe(true)
+
+    // Well past the grace, still online: the tablet never went anywhere.
+    await new Promise((r) => setTimeout(r, GRACE_MS * 3))
+    expect(tablet.client.drain()).toHaveLength(0)
+
+    await tablet.client.close()
   })
 })
 

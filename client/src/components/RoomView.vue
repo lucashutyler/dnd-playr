@@ -1,15 +1,33 @@
 <script setup>
 import { nextTick, ref } from 'vue'
 import AppButton from './AppButton.vue'
+import CharacterChooser from './CharacterChooser.vue'
+import CharacterSheet from './CharacterSheet.vue'
 import { useSession } from '../composables/useSession.js'
 
-const { session, member, members, connection, live, hasCharacter, leave, renameMe, renameRoom } =
-  useSession()
+const {
+  session,
+  member,
+  members,
+  characters,
+  connection,
+  live,
+  myCharacter,
+  leave,
+  renameMe,
+  renameRoom,
+} = useSession()
 
 // 'room' | 'me' | null
 const editing = ref(null)
 const draft = ref('')
 const inputEl = ref(null)
+
+/** Who each member is playing, so the roster reads as the party. */
+function characterNameFor(m) {
+  if (!m.characterId) return 'no character'
+  return characters.value.find((c) => c.id === m.characterId)?.name ?? ''
+}
 
 const LABELS = {
   open: 'live',
@@ -62,6 +80,9 @@ function commit() {
       </p>
     </header>
 
+    <CharacterSheet v-if="myCharacter" :character="myCharacter" />
+    <CharacterChooser v-else />
+
     <section class="roster">
       <h2 class="legend">At the table</h2>
       <ul>
@@ -89,23 +110,9 @@ function commit() {
           </button>
           <span v-else class="who">{{ m.displayName || 'Unnamed' }}</span>
 
-          <span class="claim">{{ m.characterId ? '' : 'no character' }}</span>
+          <span class="claim">{{ characterNameFor(m) }}</span>
         </li>
       </ul>
-    </section>
-
-    <section class="card">
-      <template v-if="hasCharacter">
-        <h2>Your character</h2>
-        <p class="muted">{{ member.characterId }}</p>
-      </template>
-      <template v-else>
-        <h2>No character yet</h2>
-        <p class="muted">
-          You are seated but have not claimed a character. Picking one up, or rolling a new one,
-          arrives in the next phase.
-        </p>
-      </template>
     </section>
 
     <footer class="foot">
@@ -268,33 +275,8 @@ li.off .who {
   text-align: center;
 }
 
-.card {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  gap: var(--s-2);
-  margin-block: var(--s-5);
-  padding: var(--s-5);
-  border: 1px solid var(--c-border);
-  border-radius: var(--r-3);
-  background: var(--c-surface);
-  box-shadow: var(--shadow-1);
-  text-align: center;
-}
-
-.card h2 {
-  font-size: var(--t-lg);
-  font-weight: 600;
-}
-
-.muted {
-  color: var(--c-text-dim);
-  font-size: var(--t-sm);
-  text-wrap: pretty;
-}
-
 .foot {
+  margin-top: var(--s-6);
   padding-bottom: var(--s-2);
 }
 </style>

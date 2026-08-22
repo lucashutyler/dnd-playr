@@ -3,7 +3,7 @@
 Ordered so that something is usable at a real table as early as possible. Phase 4 is the
 first version worth actually playing with; everything after is polish and hardening.
 
-Status: **Phase 2 complete.** The realtime spine is up: intents in, snapshots out.
+Status: **Phase 3 complete.** Characters, hit points and resource tracks all work.
 
 ---
 
@@ -71,26 +71,42 @@ rename in one appeared live in the other, presence updated on arrival and
 departure, and killing the server mid-session left both tabs reconnecting and
 then recovering with state intact.
 
+Presence is deliberately unhurried: a member stays on the roster for a minute after
+their last socket drops, and the client waits three seconds before admitting it is
+reconnecting. A phone at a table locks and backgrounds constantly, and the roster
+flickering for someone sitting right there was worse than being briefly wrong.
+
 Follow-up worth doing: the reconnect logic in `useSession()` has no automated
 test — it needs a fake WebSocket and timer control, and the composable's
 module-scoped state would have to become resettable first. It is the riskiest
 untested code in the repo.
 
-## Phase 3 — Characters: claim or create
+## Phase 3 — Characters: claim or create ✅
 
-- [ ] Character chooser, shown right after joining: the room's existing characters to
-      claim, plus "start a new one"
-- [ ] Claiming binds your token to that character; several devices may bind to one
-      character at once, and that's fine
-- [ ] Create flow: name + class picker, which seeds that class's resource tracks
-      (spell slots by level, hit dice, rage, ki, whatever it has)
-- [ ] Switch or release your character without deleting it
-- [ ] HP: current / max / temp. Damage applies to temp first — get this right once
-- [ ] Big thumb-sized `-` / `+` steppers, plus a tap-for-custom-amount input
-- [ ] Death saves (three up, three down, reset on heal above 0)
-- [ ] Conditions as a chip list, free-text plus a suggested set
-- [ ] Resource tracks: add / rename / set max / spend / restore / reorder
-- [ ] Short rest and long rest buttons — reset tracks by `resets_on`
+- [x] Character chooser after joining: the room's existing characters to claim,
+      plus "start a new one". Already-held sheets say so rather than being hidden
+- [x] Claiming binds the member to the character. Two devices on one character is
+      the normal path and the chooser says "2 devices" rather than warning
+- [x] Create flow: name, class and level, which seeds that class's tracks
+- [x] Release without deleting — the sheet stays in the room for next week
+- [x] HP current / max / temp, damage eating temp first, healing capped at max and
+      clearing death saves. Setting a max for the first time starts you at full
+- [x] Oversized damage and heal buttons, quick 1 / 5 / 10 chips, and a custom amount
+- [x] Death saves, shown only when actually down rather than merely unconfigured
+- [x] Conditions as chips: free text, with the usual suspects one tap away
+- [x] Resource tracks: add, rename, set max, spend, restore, reorder, remove
+- [x] Short and long rest, resetting tracks by `resets_on`. A long rest also refills
+      hit points, drops temporary ones, and clears death saves
+
+Fifteen event handlers now, all one-file-per-mutation. Verified in two browsers on
+different origins: a second device claimed the same character and damage applied on
+one appeared on the other.
+
+**No class progression tables live in this codebase, on purpose.** A class preset
+decides which tracks exist — hit dice, the right number of slot levels, the class's
+signature resource — and every value starts at 0 for the player to fill in once.
+Hit dice are the one exception, because they are just the level. Shipping a 20x9
+slot table would be the first step toward the SRD database the README rules out.
 
 ## Phase 4 — The enemy ledger ← _first genuinely usable build_
 

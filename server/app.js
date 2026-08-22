@@ -16,7 +16,7 @@ const publicDir = join(here, 'public')
  * Builds the Fastify instance without listening, so tests can use app.inject().
  * Pass a db to point at ':memory:'; otherwise the configured file is opened.
  */
-export async function buildApp({ logger = { level: config.logLevel }, db } = {}) {
+export async function buildApp({ logger = { level: config.logLevel }, db, presenceGraceMs } = {}) {
   const app = Fastify({
     logger,
     trustProxy: true,
@@ -31,7 +31,7 @@ export async function buildApp({ logger = { level: config.logLevel }, db } = {})
   if (!db) app.addHook('onClose', async () => database.close())
 
   // The websocket hub authenticates at upgrade and owns every live socket.
-  const hub = createHub({ db: database, log: app.log })
+  const hub = createHub({ db: database, log: app.log, presenceGraceMs })
   hub.attach(app.server)
   app.decorate('hub', hub)
   app.addHook('onClose', async () => hub.close())

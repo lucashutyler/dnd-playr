@@ -161,12 +161,19 @@ the docs describe, so it's a deliberate choice rather than drift.
 
 ## Current state
 
-See [docs/todo.md](docs/todo.md). **Phases 0, 1 and 2 are done**: rooms can be created,
-joined, and resumed, and the realtime spine is up — sockets authenticate at upgrade,
-intents run the apply pipeline, and every change broadcasts a full snapshot. Presence is
-live. `member.rename` and `session.rename` are the only two event handlers so far; they
-exist to prove the pipeline. Characters and enemies are in the snapshot shape but always
-empty until Phases 3 and 4 fill them.
+See [docs/todo.md](docs/todo.md). **Phases 0 through 3 are done**: rooms, the realtime
+spine, and characters. Fifteen event handlers live in `server/events/`. Enemies are in
+the snapshot shape but always empty until Phase 4.
+
+Two rules worth keeping that the code now depends on:
+
+- **No class progression tables.** `server/characters/presets.js` decides which tracks a
+  class starts with; the numbers are all 0 for the player to type once. Hit dice are the
+  exception because they equal the level. A slot table is the first step toward the SRD
+  database the README rules out.
+- **The hub re-reads `session` and `member` on every intent.** The rows cached at upgrade
+  go stale the moment someone claims a character, and a stale claim would apply damage to
+  whoever they used to be playing.
 
 The riskiest untested code is the reconnect loop in `useSession()` — it needs a fake
 WebSocket and timer control, and the composable's module-scoped state would have to

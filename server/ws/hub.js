@@ -7,6 +7,12 @@ import { buildSnapshot } from '../snapshot.js'
 const HEARTBEAT_MS = 30_000
 const MAX_PAYLOAD = 64 * 1024
 
+// A phone at a table locks, backgrounds, and wanders in and out of wifi all
+// evening. Dropping someone off the roster the instant their socket closes made
+// the party list flicker for people sitting right there, so a member stays
+// present for a grace period after their last socket goes.
+const PRESENCE_GRACE_MS = 60_000
+
 /**
  * The realtime spine.
  *
@@ -17,16 +23,48 @@ const MAX_PAYLOAD = 64 * 1024
  * Every accepted intent runs the same pipeline: validate, apply, append to
  * events, then broadcast a full snapshot to everyone in the room.
  */
-export function createHub({ db, log } = {}) {
+export function createHub({ db, log, presenceGraceMs = PRESENCE_GRACE_MS } = {}) {
   const wss = new WebSocketServer({ noServer: true, maxPayload: MAX_PAYLOAD })
   const rooms = new Map()
+  // sessionId -> Map<memberId, expiresAt>. In memory only: presence is still
+  // derived, never a column.
+  const grace = new Map()
+  const graceTimers = new Set()
   let attachedServer = null
 
   const socketsFor = (sessionId) => rooms.get(sessionId) ?? new Set()
 
+  const hasLiveSocket = (sessionId, memberId) =>
+    [...socketsFor(sessionId)].some((s) => s.member.id === memberId)
+
+  /** Holds a member on the roster for a while after their last socket drops. */
+  function startGrace(sessionId, memberId) {
+    if (!grace.has(sessionId)) grace.set(sessionId, new Map())
+    grace.get(sessionId).set(memberId, Date.now() + presenceGraceMs)
+
+    // Nothing else would tell the room when the grace runs out.
+    const timer = setTimeout(() => {
+      graceTimers.delete(timer)
+      broadcast(sessionId)
+    }, presenceGraceMs + 25)
+    timer.unref?.()
+    graceTimers.add(timer)
+  }
+
   function onlineMemberIds(sessionId) {
     const ids = new Set()
     for (const socket of socketsFor(sessionId)) ids.add(socket.member.id)
+
+    const pending = grace.get(sessionId)
+    if (pending) {
+      const now = Date.now()
+      for (const [memberId, expiresAt] of pending) {
+        if (expiresAt > now) ids.add(memberId)
+        else pending.delete(memberId)
+      }
+      if (pending.size === 0) grace.delete(sessionId)
+    }
+
     return ids
   }
 
@@ -105,22 +143,29 @@ export function createHub({ db, log } = {}) {
     const invalid = handler.validate(payload)
     if (invalid) return fail(socket, intentId, invalid)
 
-    // Re-read rather than trust the row we cached at upgrade: the room may have
-    // been renamed, or locked, by someone else since this socket connected.
+    // Re-read rather than trust the rows cached at upgrade. The room may have
+    // been renamed since this socket connected, and the member's own claim
+    // changes the moment they pick up a character — a stale row there would
+    // apply damage to whoever they used to be playing.
     const session = db.prepare('SELECT * FROM sessions WHERE id = ?').get(socket.sessionId)
     if (!session) return fail(socket, intentId, 'room_gone')
 
+    const member = db.prepare('SELECT * FROM members WHERE id = ?').get(socket.member.id)
+    if (!member) return fail(socket, intentId, 'member_gone')
+
     try {
       db.transaction(() => {
-        const logged = handler.apply({ db, session, member: socket.member, payload })
+        const logged = handler.apply({ db, session, member, payload })
         recordEvent(db, {
           sessionId: session.id,
-          memberId: socket.member.id,
+          memberId: member.id,
           type,
           payload: logged ?? payload,
         })
       })()
     } catch (err) {
+      // An IntentError is a refusal the client should see, not a bug worth logging.
+      if (err?.expected) return fail(socket, intentId, err.code)
       log?.error?.({ err, type }, 'intent failed')
       return fail(socket, intentId, 'intent_failed')
     }
@@ -137,6 +182,8 @@ export function createHub({ db, log } = {}) {
 
     if (!rooms.has(socket.sessionId)) rooms.set(socket.sessionId, new Set())
     rooms.get(socket.sessionId).add(socket)
+    // Back before the grace ran out: they never left as far as the room knows.
+    grace.get(socket.sessionId)?.delete(socket.member.id)
 
     touchMember(db, socket.member.id)
     // Everyone gets one, including the newcomer: presence just changed.
@@ -149,6 +196,13 @@ export function createHub({ db, log } = {}) {
     socket.on('close', () => {
       const sockets = socketsFor(socket.sessionId)
       sockets.delete(socket)
+
+      // Only start the clock once their last device is gone — a phone closing
+      // while the tablet stays open is not a departure.
+      if (!hasLiveSocket(socket.sessionId, socket.member.id)) {
+        startGrace(socket.sessionId, socket.member.id)
+      }
+
       if (sockets.size === 0) rooms.delete(socket.sessionId)
       else broadcast(socket.sessionId)
     })
@@ -180,6 +234,9 @@ export function createHub({ db, log } = {}) {
     countSockets: (sessionId) => socketsFor(sessionId).size,
     async close() {
       clearInterval(heartbeat)
+      for (const timer of graceTimers) clearTimeout(timer)
+      graceTimers.clear()
+      grace.clear()
       attachedServer?.off('upgrade', handleUpgrade)
       // wss.clients is the authoritative set: a socket that errored before it
       // reached the registry would otherwise keep the HTTP server from closing.

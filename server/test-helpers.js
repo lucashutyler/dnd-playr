@@ -6,9 +6,9 @@ import { openDatabase } from './db/index.js'
  * A fresh in-memory database and app per test. Rate-limit counters live on the
  * app instance, so this also keeps limits from leaking between tests.
  */
-export async function makeApp() {
+export async function makeApp(options = {}) {
   const db = openDatabase(':memory:')
-  const app = await buildApp({ logger: false, db })
+  const app = await buildApp({ logger: false, db, ...options })
   return {
     app,
     db,
@@ -20,8 +20,8 @@ export async function makeApp() {
 }
 
 /** Same, but actually listening, because websockets need a real socket. */
-export async function makeLiveApp() {
-  const ctx = await makeApp()
+export async function makeLiveApp(options = {}) {
+  const ctx = await makeApp(options)
   await ctx.app.listen({ port: 0, host: '127.0.0.1' })
   const { port } = ctx.app.server.address()
   return { ...ctx, port, wsUrl: `ws://127.0.0.1:${port}/ws` }
