@@ -36,6 +36,15 @@ of JSON. Snapshotting eliminates an entire category of desync bugs for a payload
 nobody will ever notice. If a session ever gets big enough that this hurts, that's the
 signal to add patches, and not before.
 
+## Handler contract
+
+A file in `server/events/` exports `{ type, validate, apply }` and may also export:
+
+- `prepare(payload)` — async, awaited **outside** the write transaction. This is where
+  anything slow or asynchronous goes. Argon2id hashing a passphrase is the reason it
+  exists; better-sqlite3 transactions are synchronous and must not straddle an await.
+- `undo({ db, session, member, logged })` — makes the mutation reversible. See below.
+
 ## The wire
 
 Three frame types server to client, and that is the whole protocol:
@@ -175,9 +184,18 @@ the docs describe, so it's a deliberate choice rather than drift.
 
 ## Current state
 
-See [docs/todo.md](docs/todo.md). **Phases 0 through 5 are done**: rooms, the realtime
-spine, characters, the enemy ledger, and the three-tab shell with undo. Twenty-three
-event handlers live in `server/events/`.
+See [docs/todo.md](docs/todo.md). **Phases 0 through 6 are done**: rooms, the realtime
+spine, characters, the enemy ledger, the three-tab shell with undo, and the room
+security controls. Twenty-six event handlers live in `server/events/`.
+
+Both doors are rate limited: joins per room code, and a sliding window of intents per
+socket, counted before the handler is even looked up so a flood of junk still costs the
+sender its budget. Offenders are refused, never disconnected.
+
+`sessions.archived_at` closes a room the same way `enemies.archived_at` ends an
+encounter — a timestamp, never a delete. A closed room keeps working for whoever is
+already inside so reopening is one tap; it just refuses anyone new until it is reopened,
+which a join has to ask for explicitly with `restore: true`.
 
 **Undo is a handler capability, not a framework.** A mutation is reversible exactly
 when its file exports `undo({ db, session, member, logged })`, which is why several

@@ -51,6 +51,10 @@ export function applyDelta(db, enemy, delta) {
  * Undone hits are skipped. The event stays in the log — nothing is ever
  * rewritten — but a mis-tap that has been taken back should not sit in the
  * history arguing with the number above it.
+ *
+ * The join against live enemies is what keeps this cheap: a campaign's whole
+ * back catalogue of hits is in the table, but only the current encounter's are
+ * ever read, because archiving is what takes the old ones out of scope.
  */
 export function hitsBySession(db, sessionId) {
   const rows = db
@@ -61,6 +65,10 @@ export function hitsBySession(db, sessionId) {
               json_extract(e.payload, '$.enemyId') AS enemy_id,
               json_extract(e.payload, '$.delta')   AS delta
        FROM events e
+       JOIN enemies en
+         ON en.id = json_extract(e.payload, '$.enemyId')
+        AND en.session_id = e.session_id
+        AND en.archived_at IS NULL
        WHERE e.session_id = ?
          AND e.type IN ('enemy.damage', 'enemy.heal')
          AND e.id NOT IN (

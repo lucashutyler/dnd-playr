@@ -13,6 +13,13 @@ const MAX_PAYLOAD = 64 * 1024
 // present for a grace period after their last socket goes.
 const PRESENCE_GRACE_MS = 60_000
 
+// A sliding window per socket. Generous enough that nobody tapping a stepper
+// as fast as they can will notice, tight enough that a runaway client cannot
+// spin the room. Offenders are refused, not disconnected: a stuck finger is
+// not a reason to throw somebody out of the game.
+const INTENT_LIMIT = 60
+const INTENT_WINDOW_MS = 10_000
+
 /**
  * The realtime spine.
  *
@@ -119,7 +126,16 @@ export function createHub({ db, log, presenceGraceMs = PRESENCE_GRACE_MS } = {})
     })
   }
 
-  function handleIntent(socket, raw) {
+  /** True when this socket is inside its intent budget. */
+  function withinRate(socket) {
+    const now = Date.now()
+    socket.intentTimes = (socket.intentTimes ?? []).filter((at) => now - at < INTENT_WINDOW_MS)
+    if (socket.intentTimes.length >= INTENT_LIMIT) return false
+    socket.intentTimes.push(now)
+    return true
+  }
+
+  async function handleIntent(socket, raw) {
     let message
     try {
       message = JSON.parse(raw.toString())
@@ -132,6 +148,10 @@ export function createHub({ db, log, presenceGraceMs = PRESENCE_GRACE_MS } = {})
     const intentId = typeof message?.id === 'string' ? message.id : null
     if (!message || typeof message.type !== 'string') return fail(socket, intentId, 'bad_intent')
 
+    // Counted before the handler is even looked up: a flood of intents we would
+    // have rejected anyway should still run the sender out of budget.
+    if (!withinRate(socket)) return fail(socket, intentId, 'rate_limited')
+
     const type = message.type
     // Everything that is not envelope is payload.
     const payload = { ...message }
@@ -142,6 +162,19 @@ export function createHub({ db, log, presenceGraceMs = PRESENCE_GRACE_MS } = {})
 
     const invalid = handler.validate(payload)
     if (invalid) return fail(socket, intentId, invalid)
+
+    // Anything slow or async happens before the transaction opens: hashing a
+    // passphrase must not be holding a write lock while it runs.
+    let prepared
+    if (handler.prepare) {
+      try {
+        prepared = await handler.prepare(payload)
+      } catch (err) {
+        if (err?.expected) return fail(socket, intentId, err.code)
+        log?.error?.({ err, type }, 'intent preparation failed')
+        return fail(socket, intentId, 'intent_failed')
+      }
+    }
 
     // Re-read rather than trust the rows cached at upgrade. The room may have
     // been renamed since this socket connected, and the member's own claim
@@ -155,7 +188,7 @@ export function createHub({ db, log, presenceGraceMs = PRESENCE_GRACE_MS } = {})
 
     try {
       db.transaction(() => {
-        const logged = handler.apply({ db, session, member, payload })
+        const logged = handler.apply({ db, session, member, payload, prepared })
         recordEvent(db, {
           sessionId: session.id,
           memberId: member.id,
@@ -189,7 +222,9 @@ export function createHub({ db, log, presenceGraceMs = PRESENCE_GRACE_MS } = {})
     // Everyone gets one, including the newcomer: presence just changed.
     broadcast(socket.sessionId)
 
-    socket.on('message', (raw) => handleIntent(socket, raw))
+    socket.on('message', (raw) => {
+      handleIntent(socket, raw).catch((err) => log?.error?.({ err }, 'intent handler crashed'))
+    })
 
     socket.on('error', (err) => log?.warn?.({ err }, 'socket error'))
 

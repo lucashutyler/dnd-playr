@@ -8,7 +8,7 @@ import PartyView from './PartyView.vue'
 import UndoToast from './UndoToast.vue'
 import { useSession } from '../composables/useSession.js'
 
-const { session, enemies, connection, live, myCharacter, renameRoom } = useSession()
+const { session, enemies, connection, live, myCharacter, renameRoom, setArchived } = useSession()
 
 const tab = ref('me')
 
@@ -71,6 +71,18 @@ function commitName() {
       <strong>{{ session.code }}</strong>
       <template v-if="session.hasPassphrase"> — they will need the passphrase too.</template>
     </p>
+
+    <!--
+      A closed room still works for whoever is already inside, so that reopening
+      it is one tap rather than a rejoin. It just will not take anyone new.
+    -->
+    <div v-if="session.archived" class="closed" role="status">
+      <p>
+        <strong>This room is closed.</strong>
+        Nothing has been deleted — nobody new can join until it is reopened.
+      </p>
+      <button type="button" :disabled="!live" @click="setArchived(false)">Reopen it</button>
+    </div>
 
     <!-- Only once it has actually been down a moment; see the reconnect delay. -->
     <p v-if="offline" class="banner" role="status">
@@ -187,6 +199,33 @@ function commitName() {
   color: var(--c-text-dim);
   font-size: var(--t-xs);
   text-wrap: pretty;
+}
+
+.closed {
+  display: flex;
+  align-items: center;
+  gap: var(--s-3);
+  margin-top: var(--s-2);
+  padding: var(--s-3);
+  border: 1px solid var(--c-danger);
+  border-radius: var(--r-2);
+  font-size: var(--t-xs);
+  text-wrap: pretty;
+}
+
+.closed p {
+  flex: 1;
+}
+
+.closed button {
+  flex-shrink: 0;
+  min-height: var(--tap);
+  padding-inline: var(--s-3);
+  border: none;
+  border-radius: var(--r-2);
+  background: var(--c-accent);
+  color: var(--c-on-accent);
+  font-size: var(--t-sm);
 }
 
 .banner {

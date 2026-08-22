@@ -139,6 +139,27 @@ describe('intents', () => {
   })
 })
 
+describe('flood protection', () => {
+  it('refuses a runaway socket without throwing it out of the game', async () => {
+    const room = await createRoom(ctx.app)
+    const { client } = await connected(room.token)
+
+    // Intents we would have rejected anyway still cost the sender its budget.
+    let limited = null
+    for (let i = 0; i < 120 && !limited; i += 1) {
+      client.send({ type: 'session.rename', id: 'x' + i })
+      const frame = await client.next()
+      if (frame.error === 'rate_limited') limited = frame
+    }
+
+    expect(limited).not.toBeNull()
+    // Still connected: a stuck finger is not a reason to disconnect anyone.
+    expect(client.socket.readyState).toBe(1)
+
+    await client.close()
+  })
+})
+
 describe('broadcast isolation', () => {
   it('does not leak one room into another', async () => {
     const roomA = await createRoom(ctx.app, { name: 'A' })

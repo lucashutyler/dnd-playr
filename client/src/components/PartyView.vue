@@ -1,5 +1,6 @@
 <script setup>
 import { computed, nextTick, ref } from 'vue'
+import RoomSettings from './RoomSettings.vue'
 import { useSession } from '../composables/useSession.js'
 
 const { characters, members, member, live, renameMe, leave } = useSession()
@@ -116,6 +117,8 @@ function trackedResources(character) {
       </div>
       <button type="button" class="leave" @click="leave">Leave this room on this device</button>
     </footer>
+
+    <RoomSettings />
 
     <section v-if="unseated.length" class="watching">
       <h3 class="legend">At the table, no character</h3>

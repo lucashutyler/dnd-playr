@@ -3,7 +3,7 @@
 Ordered so that something is usable at a real table as early as possible. Phase 4 is the
 first version worth actually playing with; everything after is polish and hardening.
 
-Status: **Phase 5 complete.** Three tabs, a party view, and undo.
+Status: **Phase 6 complete.** The room can be secured, locked, and closed.
 
 ---
 
@@ -169,15 +169,36 @@ speculative local state is precisely the merge-shaped bug surface the whole
 full-snapshot design exists to avoid. The controls give immediate tactile
 feedback instead. Revisit only if a real table reports lag.
 
-## Phase 6 — Securing and hardening
+## Phase 6 — Securing and hardening ✅
 
-- [ ] Set / change / clear room passphrase — anyone in the room can, no host gate
-- [ ] Lock room toggle
-- [ ] Soft-delete a room: archived and restorable by code, not destroyed. This one earns
-      a typed confirmation _and_ stays reversible
-- [ ] Rate limits: join attempts, event floods per socket
-- [ ] Payload validation on every intent; cap string lengths and array sizes
-- [ ] Prune `events` beyond N per session, or roll them up — decide before it matters
+- [x] Set, change and clear the room passphrase from inside the room. Anyone
+      seated can — the room is the boundary, not any one person in it
+- [x] Lock toggle. A lock is a door, not an eviction: nobody new gets in and
+      everybody already there keeps working
+- [x] Closing a room archives it. Nothing is deleted, it stays reversible from
+      the undo toast, and it still earns a typed confirmation — you type the
+      room code back before the button will do anything
+- [x] Rate limits on both doors: joins per room code, and a sliding window of
+      intents per socket
+- [x] Ceilings on characters, enemies and resource tracks per room
+- [x] ~~Prune `events`~~ — **decided against**, see below
+
+### Where the passphrase goes, and does not
+
+Hashing runs in a new optional `prepare()` hook that the hub awaits _before_
+opening the write transaction, because argon2id is deliberately slow and has no
+business holding a database lock. The handler's logged payload is
+`{ hasPassphrase }` and nothing else — a test asserts the plaintext and the hash
+never reach the event log, and a live run confirmed it.
+
+### Why the event log is not pruned
+
+The history is the product: it is what undo walks, what damage attribution reads,
+and what the recap view in the backlog will want. The two queries that touch it
+are both bounded regardless of how long a campaign runs — undo looks at the last
+50 of your own events, and the per-enemy hit history now joins against live
+enemies, so archiving an encounter is what takes its hits out of scope. Rows are
+a few dozen bytes. Revisit only if a real campaign makes this measurably slow.
 
 ## Phase 7 — Deploy
 

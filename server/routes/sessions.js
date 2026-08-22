@@ -39,6 +39,8 @@ const joinBody = {
   properties: {
     displayName: { type: 'string', maxLength: DISPLAY_NAME_MAX },
     passphrase: { type: 'string', maxLength: PASSPHRASE_MAX },
+    // Opt-in reopening of a closed room, so nobody does it by accident.
+    restore: { type: 'boolean' },
   },
 }
 
@@ -108,7 +110,7 @@ export default async function sessionRoutes(app) {
     },
     async (request, reply) => {
       const code = normalizeCode(request.params.code)
-      const { displayName = '', passphrase } = request.body ?? {}
+      const { displayName = '', passphrase, restore = false } = request.body ?? {}
 
       if (!isValidCode(code)) {
         return reply.code(404).send({ error: 'room_not_found' })
@@ -117,6 +119,10 @@ export default async function sessionRoutes(app) {
       const session = findSessionByCode(db, code)
       if (!session) {
         return reply.code(404).send({ error: 'room_not_found' })
+      }
+      // A closed room says so plainly, and reopening has to be asked for.
+      if (session.archived_at && !restore) {
+        return reply.code(410).send({ error: 'room_closed' })
       }
       if (session.locked) {
         return reply.code(403).send({ error: 'room_locked' })
@@ -133,20 +139,36 @@ export default async function sessionRoutes(app) {
       }
 
       const token = createToken()
+      const reopening = Boolean(session.archived_at)
+
       const member = db.transaction(() => {
+        if (reopening) {
+          db.prepare('UPDATE sessions SET archived_at = NULL, updated_at = ? WHERE id = ?').run(
+            new Date().toISOString(),
+            session.id,
+          )
+        }
         const seated = createMember(db, {
           sessionId: session.id,
           tokenHash: hashToken(token),
           displayName: displayName.trim(),
         })
+        if (reopening) {
+          recordEvent(db, { sessionId: session.id, memberId: seated.id, type: 'session.reopened' })
+        }
         recordEvent(db, { sessionId: session.id, memberId: seated.id, type: 'member.joined' })
         return seated
       })()
 
+      // Re-read so the response does not still claim the room is closed.
+      const fresh = findSessionByCode(db, code)
+
       // A member with no character is the normal state right after joining.
       return reply.code(200).send({
         token,
-        session: publicSession(session, { memberCount: countMembers(db, session.id) }),
+        session: publicSession(fresh ?? session, {
+          memberCount: countMembers(db, session.id),
+        }),
         member: publicMember(member),
       })
     },

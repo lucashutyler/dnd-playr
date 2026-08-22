@@ -1,5 +1,6 @@
 import { addResource, requireClaimed, touchCharacter } from '../characters/store.js'
 import { isCount, isText, NAME_MAX, RESETS_ON } from './validators.js'
+import { assertUnder, MAX_RESOURCES } from './limits.js'
 
 /** Any spendable thing: a slot level, a class feature, somebody's homebrew. */
 export default {
@@ -16,6 +17,13 @@ export default {
 
   apply({ db, member, payload }) {
     const character = requireClaimed(db, member)
+    assertUnder(db, {
+      sql: 'SELECT COUNT(*) FROM resources WHERE character_id = ?',
+      args: [character.id],
+      max: MAX_RESOURCES,
+      error: 'too_many_resources',
+    })
+
     const max = payload.max ?? 0
 
     const resourceId = addResource(db, character.id, {

@@ -11,6 +11,7 @@ export function publicSession(session, { memberCount = 0 } = {}) {
     code: session.code,
     name: session.name,
     locked: Boolean(session.locked),
+    archived: Boolean(session.archived_at),
     hasPassphrase: Boolean(session.passphrase_hash),
     createdAt: session.created_at,
     memberCount,

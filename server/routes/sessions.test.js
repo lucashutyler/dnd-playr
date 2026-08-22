@@ -122,6 +122,62 @@ describe('POST /api/sessions/:code/join', () => {
   })
 })
 
+describe('a closed room', () => {
+  const close = (code) =>
+    ctx.db.prepare('UPDATE sessions SET archived_at = ? WHERE code = ?').run('2026-01-01', code)
+
+  it('says so plainly rather than pretending it never existed', async () => {
+    const { session } = await createRoom(ctx.app)
+    close(session.code)
+
+    const res = await post(joinUrl(session.code), {})
+    expect(res.statusCode).toBe(410)
+    expect(res.json()).toEqual({ error: 'room_closed' })
+  })
+
+  it('reopens only when asked, and seats you', async () => {
+    const { session } = await createRoom(ctx.app)
+    close(session.code)
+
+    const res = await post(joinUrl(session.code), { restore: true, displayName: 'Robin' })
+    expect(res.statusCode).toBe(200)
+    // The response must not still claim the room is closed.
+    expect(res.json().session.archived).toBe(false)
+
+    const row = ctx.db.prepare('SELECT archived_at FROM sessions WHERE code = ?').get(session.code)
+    expect(row.archived_at).toBeNull()
+  })
+
+  it('still wants the passphrase before it reopens', async () => {
+    const { session } = await createRoom(ctx.app, { passphrase: 'dragons' })
+    close(session.code)
+
+    expect((await post(joinUrl(session.code), { restore: true })).statusCode).toBe(401)
+    expect(
+      (await post(joinUrl(session.code), { restore: true, passphrase: 'dragons' })).statusCode,
+    ).toBe(200)
+  })
+
+  it('records the reopening rather than doing it silently', async () => {
+    const { session } = await createRoom(ctx.app)
+    close(session.code)
+    await post(joinUrl(session.code), { restore: true })
+
+    const types = ctx.db.prepare('SELECT type FROM events ORDER BY id').pluck().all()
+    expect(types).toContain('session.reopened')
+  })
+
+  it('lets a member already holding a token resume it', async () => {
+    const created = await createRoom(ctx.app)
+    close(created.session.code)
+
+    // So somebody who was there can reopen from inside.
+    const res = await get('/api/session', created.token)
+    expect(res.statusCode).toBe(200)
+    expect(res.json().session.archived).toBe(true)
+  })
+})
+
 describe('GET /api/session', () => {
   it('resumes a stored token', async () => {
     const created = await createRoom(ctx.app, { name: 'Tuesday Night' })

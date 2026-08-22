@@ -35,6 +35,7 @@ const status = ref('idle')
 const connection = ref('idle')
 const error = ref(null)
 const needsPassphrase = ref(false)
+const closedRoom = ref(null)
 const toast = ref(null)
 
 let socket = null
@@ -75,6 +76,13 @@ const MESSAGES = {
   token_required: 'Sign in again.',
   token_invalid: 'Sign in again.',
   name_too_long: 'That name is too long.',
+  passphrase_too_short: 'A passphrase needs at least four characters.',
+  room_closed: 'That room is closed.',
+  no_change: 'Nothing to change there.',
+  nothing_to_undo: 'Nothing left to undo.',
+  too_many_characters: 'This room is full of characters.',
+  too_many_enemies: 'That is a lot of enemies. Start a new encounter first.',
+  too_many_resources: 'That character has all the tracks it can hold.',
 }
 
 function messageFor(code) {
@@ -307,12 +315,13 @@ async function createRoom({ name = '', displayName = '', passphrase = '' } = {})
   }
 }
 
-async function joinRoom({ code, displayName = '', passphrase = '' } = {}) {
+async function joinRoom({ code, displayName = '', passphrase = '', restore = false } = {}) {
   status.value = 'loading'
   error.value = null
 
   const body = { displayName }
   if (passphrase) body.passphrase = passphrase
+  if (restore) body.restore = true
 
   try {
     const url = '/api/sessions/' + encodeURIComponent(code.trim().toUpperCase()) + '/join'
@@ -323,6 +332,10 @@ async function joinRoom({ code, displayName = '', passphrase = '' } = {}) {
       if (payload.error === 'passphrase_required') {
         needsPassphrase.value = true
         error.value = null
+      } else if (payload.error === 'room_closed') {
+        // Reopening is offered rather than done, so nobody does it by accident.
+        closedRoom.value = code.trim().toUpperCase()
+        error.value = null
       } else {
         if (payload.error === 'passphrase_invalid') needsPassphrase.value = true
         error.value = messageFor(payload.error)
@@ -332,6 +345,7 @@ async function joinRoom({ code, displayName = '', passphrase = '' } = {}) {
     }
 
     storeToken(payload.token)
+    closedRoom.value = null
     adopt(payload)
     return true
   } catch {
@@ -354,6 +368,7 @@ function leave() {
   status.value = 'idle'
   error.value = null
   needsPassphrase.value = false
+  closedRoom.value = null
 }
 
 function clearError() {
@@ -404,6 +419,14 @@ const removeEnemy = (enemyId, label = 'enemy') =>
 const reorderEnemies = (orderedIds) => sendIntent({ type: 'enemy.reorder', orderedIds })
 const newEncounter = () => sendIntent({ type: 'encounter.new' }, 'Cleared the board')
 
+/* Room settings. Anyone seated can change these — the room is the boundary,
+   not any one person inside it. */
+const setPassphrase = (passphrase) => sendIntent({ type: 'session.passphrase', passphrase })
+const setLocked = (locked) =>
+  sendIntent({ type: 'session.lock', locked }, locked ? 'Locked the room' : 'Unlocked the room')
+const setArchived = (archived) =>
+  sendIntent({ type: 'session.archive', archived }, archived ? 'Closed the room' : null)
+
 export function useSession() {
   return {
     session: readonly(session),
@@ -415,6 +438,7 @@ export function useSession() {
     connection: readonly(connection),
     error: readonly(error),
     needsPassphrase: readonly(needsPassphrase),
+    closedRoom: readonly(closedRoom),
     toast: readonly(toast),
 
     inRoom: computed(() => Boolean(session.value)),
@@ -455,6 +479,9 @@ export function useSession() {
     removeEnemy,
     reorderEnemies,
     newEncounter,
+    setPassphrase,
+    setLocked,
+    setArchived,
 
     /** Who dealt a hit. Members are never deleted, so this always resolves. */
     memberName: (id) => members.value.find((m) => m.id === id)?.displayName || 'Someone',

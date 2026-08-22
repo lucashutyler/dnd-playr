@@ -1,6 +1,7 @@
 import { createCharacter, claim } from '../characters/store.js'
 import { CLASS_NAMES } from '../characters/presets.js'
 import { isCount, isText, NAME_MAX } from './validators.js'
+import { assertUnder, MAX_CHARACTERS } from './limits.js'
 
 /** Rolls a new character and hands it to whoever asked. */
 export default {
@@ -16,6 +17,13 @@ export default {
   },
 
   apply({ db, session, member, payload }) {
+    assertUnder(db, {
+      sql: 'SELECT COUNT(*) FROM characters WHERE session_id = ?',
+      args: [session.id],
+      max: MAX_CHARACTERS,
+      error: 'too_many_characters',
+    })
+
     const className = payload.class ?? 'Other'
     const level = payload.level ?? 1
 

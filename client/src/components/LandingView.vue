@@ -4,7 +4,7 @@ import AppButton from './AppButton.vue'
 import AppField from './AppField.vue'
 import { useSession } from '../composables/useSession.js'
 
-const { busy, error, needsPassphrase, createRoom, joinRoom, clearError } = useSession()
+const { busy, error, needsPassphrase, closedRoom, createRoom, joinRoom, clearError } = useSession()
 
 // 'menu' | 'create' | 'join'
 const mode = ref('menu')
@@ -35,11 +35,14 @@ async function submitCreate() {
   })
 }
 
-async function submitJoin() {
+async function submitJoin(restore) {
   await joinRoom({
     code: code.value,
     displayName: displayName.value,
     passphrase: passphrase.value,
+    // Strict, because a submit handler is called with the Event. Anything but
+    // a literal true would otherwise reopen a closed room by accident.
+    restore: restore === true,
   })
 }
 </script>
@@ -80,7 +83,7 @@ async function submitJoin() {
         <AppButton variant="ghost" @click="back">Back</AppButton>
       </form>
 
-      <form v-else class="stack" @submit.prevent="submitJoin">
+      <form v-else class="stack" @submit.prevent="submitJoin()">
         <AppField
           v-model="code"
           label="Room code"
@@ -100,7 +103,15 @@ async function submitJoin() {
           autocomplete="current-password"
         />
         <p v-if="error" class="error" role="alert">{{ error }}</p>
-        <AppButton variant="primary" type="submit" :disabled="busy || code.length < 4">
+
+        <div v-if="closedRoom === code.trim().toUpperCase()" class="closed">
+          <p>That room is closed. Reopening it puts everything back exactly as it was.</p>
+          <AppButton variant="primary" :disabled="busy" @click="submitJoin(true)">
+            Reopen and join
+          </AppButton>
+        </div>
+
+        <AppButton v-else variant="primary" type="submit" :disabled="busy || code.length < 4">
           {{ busy ? 'Joining...' : 'Join' }}
         </AppButton>
         <AppButton variant="ghost" @click="back">Back</AppButton>
@@ -156,5 +167,21 @@ async function submitJoin() {
 .error {
   color: var(--c-danger);
   font-size: var(--t-sm);
+}
+
+.closed {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-3);
+  padding: var(--s-3);
+  border: 1px solid var(--c-border);
+  border-radius: var(--r-2);
+  background: var(--c-surface);
+}
+
+.closed p {
+  color: var(--c-text-dim);
+  font-size: var(--t-sm);
+  text-wrap: pretty;
 }
 </style>
