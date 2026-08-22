@@ -7,6 +7,7 @@ import fastifyRateLimit from '@fastify/rate-limit'
 import { config } from './config.js'
 import { openDatabase } from './db/index.js'
 import sessionRoutes from './routes/sessions.js'
+import { createHub } from './ws/hub.js'
 
 const here = dirname(fileURLToPath(import.meta.url))
 const publicDir = join(here, 'public')
@@ -28,6 +29,12 @@ export async function buildApp({ logger = { level: config.logLevel }, db } = {})
   app.decorate('db', database)
   // Only close what we opened; a caller-supplied db is the caller's to close.
   if (!db) app.addHook('onClose', async () => database.close())
+
+  // The websocket hub authenticates at upgrade and owns every live socket.
+  const hub = createHub({ db: database, log: app.log })
+  hub.attach(app.server)
+  app.decorate('hub', hub)
+  app.addHook('onClose', async () => hub.close())
 
   // Off by default; routes opt in through config.rateLimit.
   await app.register(fastifyRateLimit, {

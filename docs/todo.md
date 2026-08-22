@@ -3,7 +3,7 @@
 Ordered so that something is usable at a real table as early as possible. Phase 4 is the
 first version worth actually playing with; everything after is polish and hardening.
 
-Status: **Phase 1 complete.** Rooms can be created, joined, and resumed.
+Status: **Phase 2 complete.** The realtime spine is up: intents in, snapshots out.
 
 ---
 
@@ -48,16 +48,33 @@ them — see `client/src/styles/tokens.css`.
 was also driven in a browser at 375px: create → reload → resume → leave → join
 with a lowercase code → wrong passphrase → right passphrase → seated second.
 
-## Phase 2 — The realtime spine
+## Phase 2 — The realtime spine ✅
 
-- [ ] Websocket upgrade with `?token=` auth; reject unauthenticated cleanly
-- [ ] Connection registry: session id → set of sockets
-- [ ] `server/events/` module contract: `{ validate, apply }` per event type
-- [ ] Apply pipeline: validate → apply → append to `events` → persist → broadcast snapshot
-- [ ] Snapshot builder (one query set → one JSON blob)
-- [ ] `useSession()` composable: connect, reconnect with backoff, expose reactive state
-- [ ] Heartbeat / ping-pong, drop dead sockets
-- [ ] Presence: who's connected right now (derive from live sockets, don't store it)
+- [x] Websocket upgrade with `?token=` auth; anything else gets a clean 401, and
+      any path but `/ws` gets a 404
+- [x] Connection registry: session id → set of sockets
+- [x] `server/events/` contract: `{ type, validate, apply }` per file, registered
+      in one line. `member.rename` and `session.rename` are the first two, and
+      exist mostly to prove the pipeline before Phase 3 leans on it
+- [x] Apply pipeline: validate → apply → append to `events` → persist → broadcast
+- [x] Snapshot builder — one query set, one JSON blob, with `characters` and
+      `enemies` already in shape so Phases 3 and 4 only have to fill them
+- [x] `useSession()` owns the socket: connect, exponential backoff with jitter,
+      and a token check after repeated failures so a dead token does not retry
+      into a wall forever
+- [x] Heartbeat ping/pong every 30s, terminating whoever missed the last round
+- [x] Presence derived from live sockets, never stored (a test asserts there is
+      no `online` column)
+
+Verified with two browser tabs on different origins, so two real members: a
+rename in one appeared live in the other, presence updated on arrival and
+departure, and killing the server mid-session left both tabs reconnecting and
+then recovering with state intact.
+
+Follow-up worth doing: the reconnect logic in `useSession()` has no automated
+test — it needs a fake WebSocket and timer control, and the composable's
+module-scoped state would have to become resettable first. It is the riskiest
+untested code in the repo.
 
 ## Phase 3 — Characters: claim or create
 
@@ -79,10 +96,16 @@ with a lowercase code → wrong passphrase → right passphrase → seated secon
 
 - [ ] Add enemy by free-text label, from any player
 - [ ] Log damage to an enemy; attributed to the logging member via `events`
-- [ ] Running tally per enemy, plus a per-player breakdown on tap
+- [ ] Running tally per enemy, and the **full per-hit history** on tap — who hit
+      it, for how much, in what order. The `events` table already holds this;
+      Phase 4 is just the read model and the UI for it
+- [ ] **Healing an enemy** is a negative entry, offered in the UI rather than
+      hidden. Monsters do get healed, and a tally that cannot go down is a lie
 - [ ] Mark defeated / fled; defeated ones collapse to the bottom rather than vanishing
 - [ ] Rename, reorder, remove
-- [ ] "New encounter" — archive the current enemy list in one tap
+- [ ] "New encounter" in one tap — **soft archive, never delete**. The previous
+      encounter and its hit history stay readable, which also makes the session
+      recap in the backlog nearly free
 
 ## Phase 5 — Party view and polish
 
@@ -117,6 +140,9 @@ with a lowercase code → wrong passphrase → right passphrase → seated secon
 
 Not scheduled. Pulled in only if the table actually asks.
 
+- [ ] **Room cleanup pass** — rooms created and never touched again are the only
+      ones worth reaping, and even then only after a long while. "Forever" is a
+      promise to real campaigns, not to abandoned test rooms.
 - [ ] **Opt-in host controls** — a room setting that, once switched on, reserves
       character removal / room deletion / passphrase changes to whoever turned it on.
       Off by default and probably forever; it exists for the table that asks for it.
@@ -132,18 +158,17 @@ Not scheduled. Pulled in only if the table actually asks.
 - [ ] PWA install + offline read of last snapshot
 - [ ] Per-character portrait/color so the party view is scannable at a glance
 
-## Open questions
+## Settled
 
-Worth answering before the phase that depends on them.
+Recorded so they do not get relitigated later.
 
-1. **Damage attribution granularity.** Per-player totals, or full per-hit history? The
-   `events` table supports both; the question is what the UI shows. Leaning: totals in
-   the list, history on tap. _(needed by Phase 4)_
-2. **Healing enemies.** Monsters do get healed sometimes. A negative damage entry handles
-   it and keeps the tally honest — but does the UI expose it, or is it an edge case that
-   free-text notes can absorb? _(needed by Phase 4)_
-3. **Encounter archiving.** Does "new encounter" hard-delete enemies or soft-archive them?
-   Soft is barely more work and makes the recap view free later. _(needed by Phase 4)_
-4. **Room lifetime.** README promises "forever." Does that survive a year of abandoned
-   test rooms? Probably needs a cleanup pass for rooms that were never actually used —
-   never touched after creation, say. _(needed by Phase 7)_
+- **Damage attribution is full per-hit history**, not just per-player totals. The
+  list shows the tally; tapping shows every hit. Folded into Phase 4.
+- **Healing an enemy is a first-class action**, not an edge case for the notes
+  field to absorb. It is a negative entry against the tally. Folded into Phase 4.
+- **History is kept.** "New encounter" archives, it does not delete. Folded into
+  Phase 4.
+- **Room lifetime is not urgent.** The README's "forever" stands; reaping rooms
+  that were created and never touched again sits in the backlog, not in a phase.
+- **Second devices claim, they are not re-seated.** Settled in Phase 1: the claim
+  lives on the member, so many members can point at one character.

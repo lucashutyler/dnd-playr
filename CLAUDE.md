@@ -36,6 +36,20 @@ of JSON. Snapshotting eliminates an entire category of desync bugs for a payload
 nobody will ever notice. If a session ever gets big enough that this hurts, that's the
 signal to add patches, and not before.
 
+## The wire
+
+Three frame types server to client, and that is the whole protocol:
+
+```
+{ type: 'snapshot', snapshot: {...} }   after any change, and on connect
+{ type: 'ack', id }                     only if the intent carried an id
+{ type: 'error', id, error }            id is null when we could not parse one
+```
+
+Client to server is an intent: `{ type, ...payload }`, optionally with an `id`
+to correlate the ack or error. There is no member id on the wire in either
+direction — the socket already knows who it is.
+
 ## Data flow rules
 
 1. **Every mutation is an event.** New mutation → new file in `server/events/`, exporting
@@ -147,10 +161,16 @@ the docs describe, so it's a deliberate choice rather than drift.
 
 ## Current state
 
-See [docs/todo.md](docs/todo.md). **Phases 0 and 1 are done**: rooms can be created,
-joined with an optional passphrase, and resumed from a stored token. SQLite is live and
-migrated. There is still no websocket server and no character or enemy logic — Phase 2
-starts the realtime spine.
+See [docs/todo.md](docs/todo.md). **Phases 0, 1 and 2 are done**: rooms can be created,
+joined, and resumed, and the realtime spine is up — sockets authenticate at upgrade,
+intents run the apply pipeline, and every change broadcasts a full snapshot. Presence is
+live. `member.rename` and `session.rename` are the only two event handlers so far; they
+exist to prove the pipeline. Characters and enemies are in the snapshot shape but always
+empty until Phases 3 and 4 fill them.
+
+The riskiest untested code is the reconnect loop in `useSession()` — it needs a fake
+WebSocket and timer control, and the composable's module-scoped state would have to
+become resettable first.
 
 Fastify's AJV is configured with `removeAdditional: false`, so an unknown field is a 400
 rather than being silently stripped. Phase 2's intents depend on that being loud.

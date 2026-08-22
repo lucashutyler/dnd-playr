@@ -1,24 +1,98 @@
 <script setup>
+import { nextTick, ref } from 'vue'
 import AppButton from './AppButton.vue'
 import { useSession } from '../composables/useSession.js'
 
-const { session, member, hasCharacter, leave } = useSession()
+const { session, member, members, connection, live, hasCharacter, leave, renameMe, renameRoom } =
+  useSession()
+
+// 'room' | 'me' | null
+const editing = ref(null)
+const draft = ref('')
+const inputEl = ref(null)
+
+const LABELS = {
+  open: 'live',
+  connecting: 'connecting',
+  reconnecting: 'reconnecting',
+  idle: 'offline',
+}
+
+async function edit(what, current) {
+  if (!live.value) return
+  editing.value = what
+  draft.value = current
+  await nextTick()
+  inputEl.value?.focus()
+  inputEl.value?.select()
+}
+
+function commit() {
+  if (editing.value === 'room') renameRoom(draft.value)
+  else if (editing.value === 'me') renameMe(draft.value)
+  editing.value = null
+}
 </script>
 
 <template>
   <main class="page">
     <header class="head">
-      <p class="eyebrow">You are in</p>
-      <h1 class="name">{{ session.name || 'this room' }}</h1>
+      <input
+        v-if="editing === 'room'"
+        ref="inputEl"
+        v-model="draft"
+        class="edit edit--name"
+        maxlength="60"
+        aria-label="Room name"
+        @keyup.enter="commit"
+        @keyup.escape="editing = null"
+        @blur="commit"
+      />
+      <button v-else class="name" type="button" @click="edit('room', session.name)">
+        {{ session.name || 'Untitled room' }}
+      </button>
+
       <p class="code" :aria-label="'Room code ' + session.code.split('').join(' ')">
         {{ session.code }}
       </p>
-      <p class="meta">
-        {{ session.memberCount }} {{ session.memberCount === 1 ? 'person' : 'people' }} seated
-        <template v-if="session.hasPassphrase"> · passphrase set</template>
-        <template v-if="session.locked"> · locked</template>
+
+      <p class="pill" :data-state="connection">
+        <span class="dot" aria-hidden="true" />
+        {{ LABELS[connection] }}
       </p>
     </header>
+
+    <section class="roster">
+      <h2 class="legend">At the table</h2>
+      <ul>
+        <li v-for="m in members" :key="m.id" :class="{ off: !m.online }">
+          <span class="dot" :class="{ on: m.online }" aria-hidden="true" />
+
+          <input
+            v-if="editing === 'me' && m.id === member.id"
+            ref="inputEl"
+            v-model="draft"
+            class="edit"
+            maxlength="40"
+            aria-label="Your name"
+            @keyup.enter="commit"
+            @keyup.escape="editing = null"
+            @blur="commit"
+          />
+          <button
+            v-else-if="m.id === member.id"
+            class="who who--me"
+            type="button"
+            @click="edit('me', m.displayName)"
+          >
+            {{ m.displayName || 'Unnamed' }} <span class="tag">you</span>
+          </button>
+          <span v-else class="who">{{ m.displayName || 'Unnamed' }}</span>
+
+          <span class="claim">{{ m.characterId ? '' : 'no character' }}</span>
+        </li>
+      </ul>
+    </section>
 
     <section class="card">
       <template v-if="hasCharacter">
@@ -51,22 +125,28 @@ const { session, member, hasCharacter, leave } = useSession()
 }
 
 .head {
-  text-align: center;
-}
-
-.eyebrow {
-  color: var(--c-text-dim);
-  font-size: var(--t-sm);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--s-1);
 }
 
 .name {
+  min-height: var(--tap);
+  padding-inline: var(--s-2);
+  border: none;
+  border-radius: var(--r-1);
+  background: none;
   font-family: var(--f-display);
   font-size: var(--t-xl);
   font-weight: 600;
 }
 
+.name:hover {
+  background: var(--c-surface-2);
+}
+
 .code {
-  margin-block: var(--s-3);
   color: var(--c-accent);
   font-family: var(--f-mono);
   font-size: var(--t-2xl);
@@ -76,9 +156,116 @@ const { session, member, hasCharacter, leave } = useSession()
   text-indent: 0.3em;
 }
 
-.meta {
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-2);
+  margin-top: var(--s-2);
+  padding: var(--s-1) var(--s-3);
+  border-radius: var(--r-pill);
+  background: var(--c-surface-2);
+  color: var(--c-text-dim);
+  font-size: var(--t-xs);
+}
+
+.dot {
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 50%;
+  background: var(--c-text-dim);
+  opacity: 0.5;
+}
+
+.pill[data-state='open'] .dot,
+.dot.on {
+  background: var(--c-ok);
+  opacity: 1;
+}
+
+.pill[data-state='reconnecting'] .dot {
+  background: var(--c-accent);
+  opacity: 1;
+}
+
+.roster {
+  margin-top: var(--s-6);
+}
+
+.legend {
   color: var(--c-text-dim);
   font-size: var(--t-sm);
+  font-weight: 500;
+}
+
+ul {
+  margin-top: var(--s-2);
+  border: 1px solid var(--c-border);
+  border-radius: var(--r-2);
+  background: var(--c-surface);
+  list-style: none;
+}
+
+li {
+  display: flex;
+  align-items: center;
+  gap: var(--s-3);
+  min-height: var(--tap);
+  padding: var(--s-2) var(--s-3);
+}
+
+li + li {
+  border-top: 1px solid var(--c-border);
+}
+
+li.off .who {
+  color: var(--c-text-dim);
+}
+
+.who {
+  flex: 1;
+  min-height: var(--tap);
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  padding: 0;
+  border: none;
+  background: none;
+  text-align: left;
+}
+
+.who--me {
+  font-weight: 600;
+}
+
+.tag {
+  padding: 0 var(--s-2);
+  border-radius: var(--r-pill);
+  background: var(--c-surface-2);
+  color: var(--c-text-dim);
+  font-size: var(--t-xs);
+  font-weight: 500;
+}
+
+.claim {
+  color: var(--c-text-dim);
+  font-size: var(--t-xs);
+}
+
+.edit {
+  flex: 1;
+  min-height: var(--tap);
+  padding: var(--s-1) var(--s-2);
+  border: 1px solid var(--c-accent);
+  border-radius: var(--r-1);
+  background: var(--c-bg);
+  font-size: var(--t-md);
+}
+
+.edit--name {
+  font-family: var(--f-display);
+  font-size: var(--t-xl);
+  font-weight: 600;
+  text-align: center;
 }
 
 .card {
