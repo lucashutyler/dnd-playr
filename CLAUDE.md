@@ -91,7 +91,11 @@ tool. Damage attribution lives in `events`, not in a column on `enemies`.
 ## Security model
 
 - Never trust the client for identity. `token` → `token_hash` lookup → member. Always.
-- Store `token_hash` and `passphrase_hash`, never the plaintext. Argon2id or bcrypt.
+- Store `token_hash` and `passphrase_hash`, never the plaintext — and note these two
+  secrets are hashed differently on purpose. Member tokens are 32 bytes we generated, so
+  there is no weak token to grind: SHA-256 is correct and a slow KDF would only add
+  latency to every reconnect. Room passphrases are chosen by a human and will be
+  "dragons": those get argon2id.
 - Tokens are 32 random bytes, base64url. They are bearer credentials — treat them like it.
 - **Authorization stops at the room door.** Once a member is authenticated into a room,
   every intent against that room is permitted. Do not write per-row ownership checks —
@@ -143,9 +147,13 @@ the docs describe, so it's a deliberate choice rather than drift.
 
 ## Current state
 
-See [docs/todo.md](docs/todo.md). **Phase 0 is done**: the scaffold builds, runs, lints,
-and tests. `/api/health` is the only route. There is no database, no websocket server, and
-no session logic yet — Phase 1 starts those.
+See [docs/todo.md](docs/todo.md). **Phases 0 and 1 are done**: rooms can be created,
+joined with an optional passphrase, and resumed from a stored token. SQLite is live and
+migrated. There is still no websocket server and no character or enemy logic — Phase 2
+starts the realtime spine.
+
+Fastify's AJV is configured with `removeAdditional: false`, so an unknown field is a 400
+rather than being silently stripped. Phase 2's intents depend on that being loud.
 
 Note `.gitattributes` pins `eol=lf`. This machine has `core.autocrlf=true` globally, and
 without the override `prettier --check` fails on every file.

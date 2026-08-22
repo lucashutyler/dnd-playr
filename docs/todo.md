@@ -3,7 +3,7 @@
 Ordered so that something is usable at a real table as early as possible. Phase 4 is the
 first version worth actually playing with; everything after is polish and hardening.
 
-Status: **Phase 0 complete.** Scaffold runs, tests and lint pass, dev proxy verified.
+Status: **Phase 1 complete.** Rooms can be created, joined, and resumed.
 
 ---
 
@@ -25,17 +25,28 @@ Status: **Phase 0 complete.** Scaffold runs, tests and lint pass, dev proxy veri
 Design tokens and the dark-mode palette landed here too, since the landing screen needed
 them — see `client/src/styles/tokens.css`.
 
-## Phase 1 — Rooms and joining
+## Phase 1 — Rooms and joining ✅
 
-- [ ] `schema.sql`: `sessions`, `members`, `characters`, `resources`, `enemies`, `events`
-- [ ] Migration runner (a numbered-files-in-a-folder loop; don't reach for a library)
-- [ ] Room code generator — unambiguous alphabet, collision check
-- [ ] `POST /api/sessions` → create room, return code + host token
-- [ ] `POST /api/sessions/:code/join` → validate passphrase, seat member, return token
-- [ ] Token hashing (argon2id), passphrase hashing, rate limit on join
-- [ ] Client: landing screen — big "Create room" / "Join with code"
-- [ ] Client: persist token in `localStorage`, auto-rejoin on load
-- [ ] Members can sit in a room with no character claimed (that's the state after joining)
+- [x] `001_init.sql`: `sessions`, `members`, `characters`, `resources`, `enemies`, `events`
+- [x] Migration runner — numbered files in a folder, each applied in one
+      transaction, no library
+- [x] Room code generator — 24-letter alphabet, unbiased `randomInt`, collision
+      check, widens a character rather than ever spinning forever
+- [x] `POST /api/sessions` → creates a room and seats the creator as an ordinary
+      member (no host token: there is no host)
+- [x] `POST /api/sessions/:code/join` → validates passphrase, seats member
+- [x] `GET /api/session` → resumes a stored token, works even on a locked room
+- [x] argon2id for passphrases, SHA-256 for tokens (see the security note in
+      CLAUDE.md for why these differ), rate limit keyed per room code
+- [x] Client: landing screen with create and join, and a passphrase field that
+      only appears once the server says the room wants one
+- [x] Client: token in `localStorage`, auto-rejoin on load
+- [x] Members can sit in a room with no character claimed — the normal state
+      after joining
+
+34 tests cover codes, hashing, migrations, and every route branch. The full flow
+was also driven in a browser at 375px: create → reload → resume → leave → join
+with a lowercase code → wrong passphrase → right passphrase → seated second.
 
 ## Phase 2 — The realtime spine
 
