@@ -13,6 +13,13 @@ import resourceUpdate from './resource-update.js'
 import resourceRemove from './resource-remove.js'
 import resourceReorder from './resource-reorder.js'
 import restTake from './rest-take.js'
+import enemyAdd from './enemy-add.js'
+import enemyDamage from './enemy-damage.js'
+import enemyHeal from './enemy-heal.js'
+import enemyUpdate from './enemy-update.js'
+import enemyRemove from './enemy-remove.js'
+import enemyReorder from './enemy-reorder.js'
+import encounterNew from './encounter-new.js'
 
 /**
  * Every mutation lives in a file here exporting { type, validate, apply }.
@@ -35,6 +42,13 @@ const handlers = [
   resourceRemove,
   resourceReorder,
   restTake,
+  enemyAdd,
+  enemyDamage,
+  enemyHeal,
+  enemyUpdate,
+  enemyRemove,
+  enemyReorder,
+  encounterNew,
 ]
 
 export const eventHandlers = new Map(handlers.map((h) => [h.type, h]))

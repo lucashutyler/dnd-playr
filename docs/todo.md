@@ -3,7 +3,7 @@
 Ordered so that something is usable at a real table as early as possible. Phase 4 is the
 first version worth actually playing with; everything after is polish and hardening.
 
-Status: **Phase 3 complete.** Characters, hit points and resource tracks all work.
+Status: **Phase 4 complete.** This is the first build worth taking to a table.
 
 ---
 
@@ -108,20 +108,29 @@ signature resource — and every value starts at 0 for the player to fill in onc
 Hit dice are the one exception, because they are just the level. Shipping a 20x9
 slot table would be the first step toward the SRD database the README rules out.
 
-## Phase 4 — The enemy ledger ← _first genuinely usable build_
+## Phase 4 — The enemy ledger ✅ ← _first genuinely usable build_
 
-- [ ] Add enemy by free-text label, from any player
-- [ ] Log damage to an enemy; attributed to the logging member via `events`
-- [ ] Running tally per enemy, and the **full per-hit history** on tap — who hit
-      it, for how much, in what order. The `events` table already holds this;
-      Phase 4 is just the read model and the UI for it
-- [ ] **Healing an enemy** is a negative entry, offered in the UI rather than
-      hidden. Monsters do get healed, and a tally that cannot go down is a lie
-- [ ] Mark defeated / fled; defeated ones collapse to the bottom rather than vanishing
-- [ ] Rename, reorder, remove
-- [ ] "New encounter" in one tap — **soft archive, never delete**. The previous
-      encounter and its hit history stay readable, which also makes the session
-      recap in the backlog nearly free
+- [x] Add by free-text label, from any player, and the add box stays open
+      because enemies arrive in batches
+- [x] Damage attributed to whoever logged it, straight off the socket
+- [x] Running tally, with the full per-hit history on tap: a per-player summary
+      first, then every entry newest-first
+- [x] Healing an enemy is a first-class button, not a hidden negative
+- [x] Defeated and fled sink below whatever is still standing rather than vanishing
+- [x] Rename, reorder, remove
+- [x] "New encounter" archives in one tap. Nothing is deleted, and one shared
+      `archived_at` is what makes a set of enemies one encounter afterwards
+
+**The tally is exactly the sum of its own history**, and a test asserts it. It is
+not clamped at zero: if a monster gets healed for more than the party has dealt,
+the number goes negative rather than lying about the ledger underneath it.
+
+The history is read out of `events` with `json_extract`, never a column, so
+attribution and the tally cannot drift apart. Only enemies in the current
+encounter carry their hits into the snapshot, which is what keeps it small.
+
+You do not need a character to work the ledger — a player who has not claimed a
+sheet can still log the party's damage.
 
 ## Phase 5 — Party view and polish
 

@@ -98,9 +98,17 @@ Do not add `characters.member_id`. It looks like the obvious direction and it's 
 
 ### The third one
 
-**Enemies have no `hp_max` and no `hp_current`.** They have `damage_total`, which only
-goes up. If you find yourself wanting a max, re-read the README — you've reinvented a DM
-tool. Damage attribution lives in `events`, not in a column on `enemies`.
+**Enemies have no `hp_max` and no `hp_current`.** They have `damage_total`: a signed
+running tally that is exactly the sum of its entries in the event log. Damage adds,
+healing subtracts, and it is deliberately not clamped at zero — a tally that disagreed
+with the history underneath it would be worse than an odd-looking negative.
+
+If you find yourself wanting a max, re-read the README — you've reinvented a DM tool.
+Attribution and per-hit history live in `events` and are read back with `json_extract`.
+Never add a hits column; two sources for one number is how they drift.
+
+`enemies.archived_at` is how "new encounter" works. It archives, never deletes, and one
+shared timestamp is what groups a set of enemies into one encounter afterwards.
 
 ## Security model
 
@@ -161,9 +169,13 @@ the docs describe, so it's a deliberate choice rather than drift.
 
 ## Current state
 
-See [docs/todo.md](docs/todo.md). **Phases 0 through 3 are done**: rooms, the realtime
-spine, and characters. Fifteen event handlers live in `server/events/`. Enemies are in
-the snapshot shape but always empty until Phase 4.
+See [docs/todo.md](docs/todo.md). **Phases 0 through 4 are done**: rooms, the realtime
+spine, characters, and the enemy ledger. Twenty-two event handlers live in
+`server/events/`. The app is usable at a real table now.
+
+Phase 5 is navigation and polish, and it has the one obvious debt to clear: the
+character sheet and the enemy ledger are stacked on a single scrolling page, because
+the Me / Party / Fight tabs are Phase 5's job rather than something to half-build early.
 
 Two rules worth keeping that the code now depends on:
 

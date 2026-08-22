@@ -3,6 +3,7 @@ import { nextTick, ref } from 'vue'
 import AppButton from './AppButton.vue'
 import CharacterChooser from './CharacterChooser.vue'
 import CharacterSheet from './CharacterSheet.vue'
+import EnemyLedger from './EnemyLedger.vue'
 import { useSession } from '../composables/useSession.js'
 
 const {
@@ -82,6 +83,8 @@ function commit() {
 
     <CharacterSheet v-if="myCharacter" :character="myCharacter" />
     <CharacterChooser v-else />
+
+    <EnemyLedger />
 
     <section class="roster">
       <h2 class="legend">At the table</h2>

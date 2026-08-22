@@ -335,6 +335,16 @@ const reorderResources = (orderedIds) => sendIntent({ type: 'resource.reorder', 
 
 const takeRest = (kind) => sendIntent({ type: 'rest.take', kind })
 
+/* The enemy ledger. Damage counts up, healing counts down, and both are the
+   same signed entry against a tally that never pretends to know a max. */
+const addEnemy = (label) => sendIntent({ type: 'enemy.add', label })
+const damageEnemy = (enemyId, amount) => sendIntent({ type: 'enemy.damage', enemyId, amount })
+const healEnemy = (enemyId, amount) => sendIntent({ type: 'enemy.heal', enemyId, amount })
+const updateEnemy = (enemyId, fields) => sendIntent({ type: 'enemy.update', enemyId, ...fields })
+const removeEnemy = (enemyId) => sendIntent({ type: 'enemy.remove', enemyId })
+const reorderEnemies = (orderedIds) => sendIntent({ type: 'enemy.reorder', orderedIds })
+const newEncounter = () => sendIntent({ type: 'encounter.new' })
+
 export function useSession() {
   return {
     session: readonly(session),
@@ -376,5 +386,15 @@ export function useSession() {
     removeResource,
     reorderResources,
     takeRest,
+    addEnemy,
+    damageEnemy,
+    healEnemy,
+    updateEnemy,
+    removeEnemy,
+    reorderEnemies,
+    newEncounter,
+
+    /** Who dealt a hit. Members are never deleted, so this always resolves. */
+    memberName: (id) => members.value.find((m) => m.id === id)?.displayName || 'Someone',
   }
 }

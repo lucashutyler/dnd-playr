@@ -1,4 +1,5 @@
 import { publicSession } from './rooms/store.js'
+import { hitsBySession } from './enemies/store.js'
 
 /**
  * One query set in, one JSON blob out. This is the entire wire format: the
@@ -28,9 +29,17 @@ export function buildSnapshot(db, sessionId, { onlineMemberIds = new Set() } = {
     )
     .all(sessionId)
 
+  // Archived enemies belong to a finished encounter and are out of the way.
+  // Defeated ones stay on the list but sink below whatever is still standing.
   const enemies = db
-    .prepare('SELECT * FROM enemies WHERE session_id = ? ORDER BY sort, created_at')
+    .prepare(
+      `SELECT * FROM enemies
+       WHERE session_id = ? AND archived_at IS NULL
+       ORDER BY (status = 'active') DESC, sort, created_at`,
+    )
     .all(sessionId)
+
+  const hits = hitsBySession(db, sessionId)
 
   const byCharacter = new Map()
   for (const row of resources) {
@@ -68,9 +77,12 @@ export function buildSnapshot(db, sessionId, { onlineMemberIds = new Set() } = {
     enemies: enemies.map((e) => ({
       id: e.id,
       label: e.label,
-      // No hp_max, no hp_current. Only what the party has dealt.
+      // No hp_max, no hp_current. Only what the party has done to it.
       damageTotal: e.damage_total,
       status: e.status,
+      // Every hit, in order, straight from the event log. Only the current
+      // encounter's enemies are here, so this stays a handful of rows.
+      hits: hits.get(e.id) ?? [],
     })),
   }
 }

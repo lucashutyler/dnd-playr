@@ -28,8 +28,11 @@ use them this way.
   tracks — spell slots, hit dice, rage, ki, superiority dice, whatever your class has.
 - **The party view.** Everyone's HP and slots at a glance, live.
 - **The enemy ledger.** Anyone can add an enemy by whatever name the table is using
-  ("big guy with the axe"), and anyone can log damage to it. Tallies are attributed, so
-  you can see who's contributed what.
+  ("big guy with the axe"), and anyone can log damage to it. Tap one to see the whole
+  history — who hit it, for how much, in what order. Monsters that get healed count
+  down again, because a tally that can only rise isn't a ledger.
+- **Encounters archive, they don't vanish.** "New encounter" clears the board in one
+  tap and keeps every hit on the record.
 - **Realtime.** Websockets. Someone takes damage, everyone's screen updates.
 - **Undo.** Every change is an event, so a fat-fingered tap on a phone is one tap back.
 
