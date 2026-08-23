@@ -5,6 +5,7 @@ import Fastify from 'fastify'
 import fastifyStatic from '@fastify/static'
 import fastifyRateLimit from '@fastify/rate-limit'
 import { config } from './config.js'
+import { loggerOptions } from './logging.js'
 import { openDatabase } from './db/index.js'
 import sessionRoutes from './routes/sessions.js'
 import { createHub } from './ws/hub.js'
@@ -16,7 +17,11 @@ const publicDir = join(here, 'public')
  * Builds the Fastify instance without listening, so tests can use app.inject().
  * Pass a db to point at ':memory:'; otherwise the configured file is opened.
  */
-export async function buildApp({ logger = { level: config.logLevel }, db, presenceGraceMs } = {}) {
+export async function buildApp({
+  logger = loggerOptions(config.logLevel),
+  db,
+  presenceGraceMs,
+} = {}) {
   const app = Fastify({
     logger,
     trustProxy: true,
@@ -34,7 +39,11 @@ export async function buildApp({ logger = { level: config.logLevel }, db, presen
   const hub = createHub({ db: database, log: app.log, presenceGraceMs })
   hub.attach(app.server)
   app.decorate('hub', hub)
-  app.addHook('onClose', async () => hub.close())
+  // preClose, not onClose: onClose runs after Fastify has already begun waiting
+  // for open connections to end, and an upgraded websocket never ends on its
+  // own. Letting go of the sockets first is what keeps a restart from hanging
+  // while the table is still connected.
+  app.addHook('preClose', async () => hub.close())
 
   // Off by default; routes opt in through config.rateLimit.
   await app.register(fastifyRateLimit, {

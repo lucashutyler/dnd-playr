@@ -184,9 +184,19 @@ the docs describe, so it's a deliberate choice rather than drift.
 
 ## Current state
 
-See [docs/todo.md](docs/todo.md). **Phases 0 through 6 are done**: rooms, the realtime
-spine, characters, the enemy ledger, the three-tab shell with undo, and the room
-security controls. Twenty-six event handlers live in `server/events/`.
+See [docs/todo.md](docs/todo.md). **All seven phases are done.** Twenty-six event
+handlers live in `server/events/`, and [docs/deploy.md](docs/deploy.md) covers running
+it for real.
+
+Two operational rules the code depends on:
+
+- **The hub tears down in `preClose`, not `onClose`.** By `onClose` Fastify is already
+  waiting for open connections to end, and an upgraded websocket never ends on its own,
+  so a restart hangs for as long as anyone is connected. There is a test that opens
+  sockets, never closes them, and asserts the app lets go in under two seconds.
+- **Credentials never reach the logs.** The `Authorization` header is redacted and the
+  `token` query parameter on the upgrade URL is scrubbed, both tested. Adding a new log
+  line that includes a raw URL or header would undo that.
 
 Both doors are rate limited: joins per room code, and a sliding window of intents per
 socket, counted before the handler is even looked up so a flood of junk still costs the

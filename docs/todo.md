@@ -3,7 +3,7 @@
 Ordered so that something is usable at a real table as early as possible. Phase 4 is the
 first version worth actually playing with; everything after is polish and hardening.
 
-Status: **Phase 6 complete.** The room can be secured, locked, and closed.
+Status: **All seven phases complete.** See [deploy.md](deploy.md) for running it.
 
 ---
 
@@ -200,12 +200,49 @@ are both bounded regardless of how long a campaign runs — undo looks at the la
 enemies, so archiving an encounter is what takes its hits out of scope. Rows are
 a few dozen bytes. Revisit only if a real campaign makes this measurably slow.
 
-## Phase 7 — Deploy
+## Phase 7 — Deploy ✅
 
-- [ ] Single-process production build verified end to end
-- [ ] Reverse proxy notes (`wss://` upgrade headers — the classic footgun)
-- [ ] SQLite WAL mode, and a documented backup = copy-the-file story
-- [ ] Basic structured request/event logging
+- [x] Single-process production build verified end to end, from an empty `data/`:
+      migrations ran, the API answered, the built client and its hashed assets
+      were served, client routes fell back to the app, a socket connected,
+      applied an intent and got its ack
+- [x] Reverse proxy notes in [deploy.md](deploy.md) — nginx and Caddy, with the
+      two `proxy_set_header` lines the whole thing hinges on and a read timeout
+      longer than the 30s heartbeat
+- [x] WAL confirmed on, and `npm run backup` for a coherent snapshot of a live
+      database
+- [x] Structured logging, with the credentials deliberately kept out of it
+
+### The backup story changed
+
+The README used to say "back up by copying that file", which is wrong once WAL
+is on: recent writes live in a sidecar and a plain copy can miss them.
+`npm run backup` uses SQLite's own backup API instead, and works while the
+server is running. Verified against a live database — the copy opened cleanly
+with every row and the right tally.
+
+### Nothing sensitive reaches the logs
+
+The `Authorization` header is redacted and the `token` query parameter on the
+websocket upgrade is scrubbed, both with tests. A live run was grepped
+afterwards for tokens, token hashes and the header: none of them appear.
+
+### The shutdown bug this phase existed to find
+
+`app.close()` hung whenever a socket was still attached — which on a real
+deploy is every restart, because a phone that walked out of range never sends a
+close frame. Phase 2 terminated the sockets in an `onClose` hook, which was the
+right action at the wrong time: by then Fastify is already waiting for open
+connections to end. Moving it to `preClose` fixed it, and there is now a test
+that opens sockets, never closes them, and asserts the app lets go in under two
+seconds.
+
+Worth noting what this means about Phase 2's claim: the socket termination was
+necessary but never sufficient, and nothing until now actually exercised it.
+
+Signal-based shutdown itself cannot be verified on Windows — `kill` there
+force-terminates rather than delivering a signal, so the handler never runs.
+What matters is `app.close()`, and that is what the test covers.
 
 ---
 

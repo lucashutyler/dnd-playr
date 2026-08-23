@@ -139,6 +139,29 @@ describe('intents', () => {
   })
 })
 
+describe('shutdown', () => {
+  it('lets go promptly even with sockets still attached', async () => {
+    const room = await createRoom(ctx.app)
+    const joined = await ctx.app
+      .inject({ method: 'POST', url: `/api/sessions/${room.session.code}/join`, payload: {} })
+      .then((r) => r.json())
+
+    // Deliberately never closed from this side: a phone that walked out of
+    // range does not send a close frame either, and a deploy cannot wait.
+    await connected(room.token)
+    await connected(joined.token)
+
+    const started = Date.now()
+    await ctx.close()
+    const took = Date.now() - started
+
+    expect(took).toBeLessThan(2000)
+
+    // afterEach would close it again; make that a no-op.
+    ctx = { close: async () => {} }
+  })
+})
+
 describe('flood protection', () => {
   it('refuses a runaway socket without throwing it out of the game', async () => {
     const room = await createRoom(ctx.app)

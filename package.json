@@ -16,7 +16,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "lint": "eslint . && prettier --check .",
-    "format": "prettier --write ."
+    "format": "prettier --write .",
+    "backup": "node server/scripts/backup.js"
   },
   "dependencies": {
     "@fastify/rate-limit": "^11.2.0",

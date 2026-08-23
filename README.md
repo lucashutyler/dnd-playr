@@ -97,9 +97,18 @@ npm run build && npm start
 ```
 
 Builds the frontend and serves it from the Node process on `:3000` as a single deployable.
+See [docs/deploy.md](docs/deploy.md) for putting it behind a reverse proxy — the websocket
+upgrade headers are the one thing that reliably goes wrong.
 
-Data lives in one SQLite file (`data/dnd-playr.db` by default). Back up the app by
-copying that file.
+Data lives in one SQLite file (`data/dnd-playr.db` by default).
+
+```bash
+npm run backup
+```
+
+That takes a coherent snapshot of a live database. Don't just copy the file while the
+server is running: WAL mode keeps recent writes in a sidecar, and a plain copy can miss
+them.
 
 ## Stack
 
