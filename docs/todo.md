@@ -41,6 +41,25 @@ Codes were the Jackbox idea and they were the wrong shape here. Jackbox has a TV
 in the room to display one; a table has phones, and phones have cameras and
 clipboards.
 
+## After the phases — party and fight share a screen
+
+A second playtest note: during combat, party hit points and enemy tallies are read
+together. Having them on separate tabs meant flipping back and forth mid-turn.
+
+- [x] Two tabs instead of three. **Me** is your sheet and your device; **The table**
+      is the party and what it is fighting
+- [x] The party is a compact strip above the fight — one line each, name, bar,
+      current/max, temporary points, and conditions when there are any. Tapping one
+      opens class, level, AC, resource tracks and who is holding the sheet
+- [x] The strip is sticky and capped at 45dvh, so it stays put while the enemy list
+      scrolls under it and a large party still cannot crowd out the fight
+- [x] Room settings moved to the bottom of the table tab, where the room lives.
+      Your display name and leaving moved to Me, since both are about your device
+
+Verified at 375px with three characters and eight enemies: the strip takes 27% of
+the screen, all three party bars stay pinned while scrolling deep into the list, and
+nothing overflows.
+
 ---
 
 ## Phase 0 — Scaffold ✅
@@ -173,7 +192,8 @@ sheet can still log the party's damage.
 
 - [x] Party tab: every character's HP bar, conditions and filled-in tracks at a
       glance, plus who is holding each sheet and whether they are here
-- [x] Bottom nav: Me / Party / Fight, with a count of what is still standing
+- [x] Bottom nav, with a count of what is still standing (started as Me / Party /
+      Fight; see the note below on why it is two tabs now)
 - [x] Design tokens, dark mode and the type scale — landed in Phase 0, verified
       here at 375px in both schemes
 - [x] Undo toast, and `history.undo` behind it

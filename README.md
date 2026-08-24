@@ -27,7 +27,9 @@ use them this way.
 - **Rooms are permanent.** Your campaign's room is still there next week. And next year.
 - **Your strip.** HP (current / max / temp), death saves, conditions, and resource
   tracks — spell slots, hit dice, rage, ki, superiority dice, whatever your class has.
-- **The party view.** Everyone's HP and slots at a glance, live.
+- **The table view.** Everyone's HP, conditions and remaining resources sit directly
+  above the enemies, live, so you can read "can I survive another round" and "how close
+  is it to dead" without switching screens.
 - **The enemy ledger.** Anyone can add an enemy by whatever name the table is using
   ("big guy with the axe"), and anyone can log damage to it. Tap one to see the whole
   history — who hit it, for how much, in what order. Monsters that get healed count

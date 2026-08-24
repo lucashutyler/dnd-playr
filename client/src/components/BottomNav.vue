@@ -6,11 +6,14 @@ defineProps({
 
 defineEmits(['update:modelValue'])
 
-// Three. Resist a fourth — see the mobile rules in CLAUDE.md.
+/*
+ * Two. Party and the fight were separate tabs until a playtest pointed out
+ * that during combat they are read together, so they share a screen now.
+ * Resist a third.
+ */
 const TABS = [
   { id: 'me', label: 'Me' },
-  { id: 'party', label: 'Party' },
-  { id: 'fight', label: 'Fight' },
+  { id: 'table', label: 'The table' },
 ]
 </script>
 
@@ -25,7 +28,7 @@ const TABS = [
       @click="$emit('update:modelValue', tab.id)"
     >
       {{ tab.label }}
-      <span v-if="tab.id === 'fight' && fightCount" class="count">{{ fightCount }}</span>
+      <span v-if="tab.id === 'table' && fightCount" class="count">{{ fightCount }}</span>
     </button>
   </nav>
 </template>

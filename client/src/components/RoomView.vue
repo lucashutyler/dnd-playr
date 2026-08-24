@@ -1,15 +1,13 @@
 <script setup>
 import { computed, nextTick, ref } from 'vue'
 import BottomNav from './BottomNav.vue'
-import CharacterChooser from './CharacterChooser.vue'
-import CharacterSheet from './CharacterSheet.vue'
-import EnemyLedger from './EnemyLedger.vue'
-import PartyView from './PartyView.vue'
+import MeView from './MeView.vue'
 import ShareRoom from './ShareRoom.vue'
+import TableView from './TableView.vue'
 import UndoToast from './UndoToast.vue'
 import { useSession } from '../composables/useSession.js'
 
-const { session, enemies, connection, live, myCharacter, renameRoom, setArchived } = useSession()
+const { session, enemies, connection, live, renameRoom, setArchived } = useSession()
 
 const tab = ref('me')
 
@@ -88,16 +86,11 @@ function commitName() {
     -->
     <main class="content">
       <section v-show="tab === 'me'">
-        <CharacterSheet v-if="myCharacter" :character="myCharacter" />
-        <CharacterChooser v-else />
+        <MeView />
       </section>
 
-      <section v-show="tab === 'party'">
-        <PartyView />
-      </section>
-
-      <section v-show="tab === 'fight'">
-        <EnemyLedger />
+      <section v-show="tab === 'table'">
+        <TableView />
       </section>
     </main>
 

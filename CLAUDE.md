@@ -180,7 +180,14 @@ The primary device is a phone held in one hand at a table, in a dim room, next t
 - Tap targets ≥ 44px. HP steppers should be bigger — they're the most-used control.
 - No horizontal scroll, ever, at any width.
 - Primary actions in the bottom third of the screen, reachable by thumb.
-- Three tabs, bottom nav: **Me**, **Party**, **Fight**. Resist a fourth.
+- Two tabs, bottom nav: **Me** and **The table**. Me is your sheet and your device;
+  the table is the party and what it is fighting, on one screen. Party and Fight were
+  separate until a playtest pointed out they are read together during combat, and
+  flipping tabs mid-turn to answer "can I take another hit" is the wrong shape.
+  Resist a third.
+- The party strip is `position: sticky` and capped at `45dvh`, so the party stays
+  visible while the enemy list scrolls under it and a big party still cannot eat the
+  fight.
 - Support dark mode from the start via `prefers-color-scheme`. Tables are dim.
 - Every destructive action is undoable rather than confirmed. Confirmation dialogs on a
   phone are worse than an undo toast.
