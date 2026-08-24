@@ -21,8 +21,9 @@ use them this way.
 
 ## What it does
 
-- **Room codes.** One player makes a room, gets a 4-letter code, everyone else joins.
-  Jackbox-style. No accounts, no email, no signup. Claim a character or roll a new one.
+- **A room is a link.** One player makes a room and gets a URL. Share it, or hold up
+  the QR code and let everyone point a camera at it. No accounts, no email, no signup.
+  Claim a character or roll a new one.
 - **Rooms are permanent.** Your campaign's room is still there next week. And next year.
 - **Your strip.** HP (current / max / temp), death saves, conditions, and resource
   tracks — spell slots, hit dice, rage, ki, superiority dice, whatever your class has.
@@ -44,7 +45,8 @@ this is the thing you keep open _next to_ the game, not the thing you play the g
 
 ## Joining
 
-Enter the code, and the passphrase if the room has one. Then either:
+Open the link — or paste it into the join box, or type just the bit on the end. Then
+give the passphrase if the room has one, and either:
 
 - **Claim a character already in the room** — yours, from last week's session or from
   your other device. Reopening the tab in a month, or switching from phone to tablet, is
@@ -59,7 +61,11 @@ time you land straight back on your character.
 
 The boundary is the **room**, not the row:
 
-- A room has a short **code** (`KTZP`) for joining and a long internal id you never see.
+- A room lives at `/room/k7m3qp`. That id is generated, and long enough that nobody
+  finds your room by guessing. The internal database id is never on the wire.
+- A room can also claim a **custom link** like `/room/c/samsroom` — but only once it has
+  a passphrase. A name somebody picked is the first thing anyone would try, so the
+  pretty link is convenience and the passphrase is the actual door.
 - A room can have an optional **passphrase**. Set it if you're playing somewhere public.
 - A room can be **locked** once everyone's in, so nobody else can join at all.
 - **Inside a room, everyone is equal.** Anyone can claim any character, add enemies, and

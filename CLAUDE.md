@@ -77,7 +77,8 @@ direction — the socket already knows who it is.
 
 SQLite, in `server/db/schema.sql`. Roughly:
 
-- `sessions` — id, code, name, `passphrase_hash` (nullable), `locked`, timestamps
+- `sessions` — id, `url_id` (the link), `slug` (nullable alias), name,
+  `passphrase_hash` (nullable), `locked`, `archived_at`, timestamps
 - `members` — id, session_id, `token_hash`, `character_id` (nullable), display_name, last_seen
 - `characters` — id, session_id, name, class, level, hp_current, hp_max, hp_temp, ac,
   death saves, `conditions` (json), `notes`
@@ -132,10 +133,14 @@ shared timestamp is what groups a set of enemies into one encounter afterwards.
   every intent against that room is permitted. Do not write per-row ownership checks —
   no "is this your character", no "did you add this enemy". There is deliberately no host
   role; don't reintroduce one outside the opt-in design in the backlog.
-- Rate-limit join attempts per code. A 4-letter code is brute-forceable; the passphrase
-  and the lock flag are the real defenses, and the rate limit makes enumeration boring.
-- Room codes are generated from `ABCDEFGHJKLMNPQRSTUVWXYZ` (no I, O) and checked for
-  collisions against live rooms.
+- Rate-limit join attempts per room. The link id is the only thing standing between a
+  stranger and a room with no passphrase, so enumeration has to stay boring.
+- **A room has one identifier: `url_id`.** Six characters of `abcdefghjkmnpqrstuvwxyz23456789`,
+  widening rather than ever failing to allocate. There used to be a second, four-letter
+  code for reading aloud; it was deleted rather than kept in step with this one.
+- `sessions.slug` is an optional alias, and it may only exist on a room that has a
+  passphrase — enforced when claiming it _and_ when clearing the passphrase. A chosen
+  name is guessable by design; do not let one outlive the thing protecting it.
 - No PII anywhere. Display names only. Don't add email, don't add OAuth.
 
 ## Frontend conventions
@@ -198,7 +203,7 @@ Two operational rules the code depends on:
   `token` query parameter on the upgrade URL is scrubbed, both tested. Adding a new log
   line that includes a raw URL or header would undo that.
 
-Both doors are rate limited: joins per room code, and a sliding window of intents per
+Both doors are rate limited: joins per room, and a sliding window of intents per
 socket, counted before the handler is even looked up so a flood of junk still costs the
 sender its budget. Offenders are refused, never disconnected.
 

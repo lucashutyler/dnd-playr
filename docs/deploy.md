@@ -87,7 +87,7 @@ limiter sees. If you do not set that header, every client looks like the proxy.
 curl -s https://dnd.example.com/api/health
 ```
 
-Then open the app and look at the dot next to the room code: green is a live
+Then open the app and look at the dot on the Share button: green is a live
 socket. If the page loads but the dot never goes green, it is the two `proxy_set_header`
 lines above, essentially every time.
 
@@ -132,7 +132,7 @@ Two things are deliberately never in there: the `Authorization` header, and the
 `token` query parameter on the websocket upgrade. Both are bearer credentials,
 and a log line containing one hands over somebody's seat. There is a test for it.
 
-At `LOG_LEVEL=debug` every applied intent is logged with its type, room code and
+At `LOG_LEVEL=debug` every applied intent is logged with its type, room link id and
 member id — useful when a table reports something odd, and still free of anything
 sensitive.
 

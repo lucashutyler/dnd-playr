@@ -5,6 +5,7 @@ import CharacterChooser from './CharacterChooser.vue'
 import CharacterSheet from './CharacterSheet.vue'
 import EnemyLedger from './EnemyLedger.vue'
 import PartyView from './PartyView.vue'
+import ShareRoom from './ShareRoom.vue'
 import UndoToast from './UndoToast.vue'
 import { useSession } from '../composables/useSession.js'
 
@@ -16,7 +17,7 @@ const editingName = ref(false)
 const draft = ref('')
 const nameInput = ref(null)
 
-const showCode = ref(false)
+const sharing = ref(false)
 
 const offline = computed(() => connection.value !== 'open')
 const activeEnemies = computed(() => enemies.value.filter((e) => e.status === 'active').length)
@@ -54,23 +55,13 @@ function commitName() {
         {{ session.name || 'Untitled room' }}
       </button>
 
-      <button
-        class="code"
-        type="button"
-        :aria-expanded="showCode"
-        aria-label="Room code"
-        @click="showCode = !showCode"
-      >
+      <button class="invite" type="button" :aria-expanded="sharing" @click="sharing = !sharing">
         <i class="dot" :class="connection" aria-hidden="true" />
-        {{ session.code }}
+        Share
       </button>
     </header>
 
-    <p v-if="showCode" class="share">
-      Anyone can join at this room's code:
-      <strong>{{ session.code }}</strong>
-      <template v-if="session.hasPassphrase"> — they will need the passphrase too.</template>
-    </p>
+    <ShareRoom v-if="sharing" />
 
     <!--
       A closed room still works for whoever is already inside, so that reopening
@@ -156,7 +147,7 @@ function commitName() {
   background: var(--c-bg);
 }
 
-.code {
+.invite {
   display: inline-flex;
   align-items: center;
   flex-shrink: 0;
@@ -166,11 +157,8 @@ function commitName() {
   border: 1px solid var(--c-border);
   border-radius: var(--r-pill);
   background: var(--c-surface);
-  color: var(--c-accent);
-  font-family: var(--f-mono);
   font-size: var(--t-sm);
-  font-weight: 700;
-  letter-spacing: 0.15em;
+  font-weight: 600;
 }
 
 .dot {
@@ -189,16 +177,6 @@ function commitName() {
 .dot.reconnecting {
   background: var(--c-accent);
   opacity: 1;
-}
-
-.share {
-  margin-top: var(--s-2);
-  padding: var(--s-2) var(--s-3);
-  border-radius: var(--r-2);
-  background: var(--c-surface-2);
-  color: var(--c-text-dim);
-  font-size: var(--t-xs);
-  text-wrap: pretty;
 }
 
 .closed {

@@ -3,7 +3,36 @@
 Ordered so that something is usable at a real table as early as possible. Phase 4 is the
 first version worth actually playing with; everything after is polish and hardening.
 
-Status: **All seven phases complete.** See [deploy.md](deploy.md) for running it.
+Status: **All seven phases complete**, plus the navigation work below. See
+[deploy.md](deploy.md) for running it.
+
+---
+
+## After the phases — rooms have links
+
+A playtest found the obvious hole: a room had no URL, so it could not be shared,
+bookmarked, or returned to, and a stray back gesture lost it.
+
+- [x] A room is a link. `/room/k7m3qp`, generated at creation, six characters of an
+      unambiguous alphabet, widening if it ever had to
+- [x] **The four-letter code is gone.** It was a second identifier doing a job the
+      link now does better, and a code short enough to read aloud is too short to
+      paste around. One id, or they drift
+- [x] Custom links: `/room/c/samsroom`, unique across every room including closed
+      ones, and only on a room that already has a passphrase — enforced both when
+      claiming one and when trying to clear the passphrase out from under it
+- [x] Copy link, and a QR code to hold up at the table. Rendered as one SVG path,
+      always dark-on-white so a camera can read it whatever the theme is
+- [x] Seats are stored per room, so opening somebody else's link does not resume
+      whichever room you were last in. The pre-links token upgrades itself once
+- [x] Navigation is `replaceState` throughout: back leaves the app rather than
+      stranding you on the form you passed through. Landing on a link you have no
+      seat in fills the join box in for you
+- [x] The join box takes a pasted link, a custom name, or just the id
+
+Codes were the Jackbox idea and they were the wrong shape here. Jackbox has a TV
+in the room to display one; a table has phones, and phones have cameras and
+clipboards.
 
 ---
 
@@ -30,8 +59,9 @@ them — see `client/src/styles/tokens.css`.
 - [x] `001_init.sql`: `sessions`, `members`, `characters`, `resources`, `enemies`, `events`
 - [x] Migration runner — numbered files in a folder, each applied in one
       transaction, no library
-- [x] Room code generator — 24-letter alphabet, unbiased `randomInt`, collision
-      check, widens a character rather than ever spinning forever
+- [x] Room id generator — unbiased `randomInt`, collision check, widens a character
+      rather than ever spinning forever (this was the four-letter code at the time;
+      see the navigation work above for what replaced it)
 - [x] `POST /api/sessions` → creates a room and seats the creator as an ordinary
       member (no host token: there is no host)
 - [x] `POST /api/sessions/:code/join` → validates passphrase, seats member

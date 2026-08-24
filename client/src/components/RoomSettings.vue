@@ -2,7 +2,10 @@
 import { computed, ref } from 'vue'
 import { useSession } from '../composables/useSession.js'
 
-const { session, live, setPassphrase, setLocked, setArchived } = useSession()
+const { session, live, error, setPassphrase, setLocked, setArchived, setSlug } = useSession()
+
+const editingSlug = ref(false)
+const slugDraft = ref('')
 
 const open = ref(false)
 const editingPassphrase = ref(false)
@@ -14,8 +17,20 @@ const closing = ref(false)
 const confirmCode = ref('')
 
 const codeMatches = computed(
-  () => confirmCode.value.trim().toUpperCase() === session.value.code.toUpperCase(),
+  () => confirmCode.value.trim().toLowerCase() === session.value.urlId.toLowerCase(),
 )
+
+function startSlugEdit() {
+  slugDraft.value = session.value.slug ?? ''
+  editingSlug.value = true
+}
+
+function saveSlug() {
+  const value = slugDraft.value.trim().toLowerCase()
+  if (value.length < 3) return
+  setSlug(value)
+  editingSlug.value = false
+}
 
 function savePassphrase() {
   const value = passphrase.value.trim()
@@ -53,7 +68,7 @@ function closeRoom() {
           <small>{{
             session.hasPassphrase
               ? 'Set. New players need it to join.'
-              : 'None. The code alone gets anyone in.'
+              : 'None. The link alone gets anyone in.'
           }}</small>
         </div>
 
@@ -94,11 +109,55 @@ function closeRoom() {
 
       <div class="setting">
         <div class="label">
+          <strong>Custom link</strong>
+          <small v-if="session.slug">
+            This room answers to <code>/room/c/{{ session.slug }}</code> as well as its generated
+            link.
+          </small>
+          <small v-else-if="!session.hasPassphrase">
+            Set a passphrase first. A name somebody picked is easy to guess, so it is only offered
+            once there is a passphrase actually holding the door.
+          </small>
+          <small v-else>Give the room a name people can remember.</small>
+        </div>
+
+        <div v-if="editingSlug" class="edit">
+          <input
+            v-model="slugDraft"
+            placeholder="samsroom"
+            maxlength="32"
+            autocapitalize="off"
+            aria-label="Custom link"
+            @keyup.enter="saveSlug"
+          />
+          <button
+            type="button"
+            class="primary"
+            :disabled="slugDraft.trim().length < 3"
+            @click="saveSlug"
+          >
+            Claim
+          </button>
+          <button type="button" @click="editingSlug = false">Cancel</button>
+        </div>
+        <div v-else class="row">
+          <button type="button" :disabled="!live || !session.hasPassphrase" @click="startSlugEdit">
+            {{ session.slug ? 'Change' : 'Claim a name' }}
+          </button>
+          <button v-if="session.slug" type="button" :disabled="!live" @click="setSlug(null)">
+            Release
+          </button>
+        </div>
+        <p v-if="error" class="oops" role="alert">{{ error }}</p>
+      </div>
+
+      <div class="setting">
+        <div class="label">
           <strong>Lock</strong>
           <small>{{
             session.locked
               ? 'Locked. Nobody new can join, and everyone here stays.'
-              : 'Open. Anyone with the code can join.'
+              : 'Open. Anyone with the link can join.'
           }}</small>
         </div>
         <div class="row">
@@ -113,17 +172,17 @@ function closeRoom() {
           <strong>Close this room</strong>
           <small>
             Takes it out of use without deleting anything. Characters, the ledger and the whole
-            history stay put, and it reopens with the code.
+            history stay put, and it reopens from its link.
           </small>
         </div>
 
         <div v-if="closing" class="edit">
           <input
             v-model="confirmCode"
-            :placeholder="'Type ' + session.code + ' to confirm'"
-            maxlength="8"
-            autocapitalize="characters"
-            aria-label="Confirm the room code"
+            :placeholder="'Type ' + session.urlId + ' to confirm'"
+            maxlength="16"
+            autocapitalize="off"
+            aria-label="Confirm the room link"
           />
           <button type="button" class="danger" :disabled="!codeMatches" @click="closeRoom">
             Close it
@@ -228,5 +287,14 @@ button:disabled {
 .danger {
   border-color: var(--c-danger);
   color: var(--c-danger);
+}
+
+.oops {
+  color: var(--c-danger);
+  font-size: var(--t-xs);
+}
+
+code {
+  font-family: var(--f-mono);
 }
 </style>

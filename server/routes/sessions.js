@@ -5,14 +5,14 @@ import {
   hashToken,
   verifyPassphrase,
 } from '../auth/tokens.js'
-import { allocateCode, isValidCode, normalizeCode } from '../rooms/code.js'
+import { findSessionByUrlId, isValidUrlId, normalizeUrlId } from '../rooms/url-id.js'
+import { findSessionBySlug, normalizeSlug } from '../rooms/slug.js'
 import { CLASS_NAMES } from '../characters/presets.js'
 import {
   countMembers,
   createMember,
   createSession,
   findMemberByTokenHash,
-  findSessionByCode,
   publicMember,
   publicSession,
   recordEvent,
@@ -64,11 +64,7 @@ export default async function sessionRoutes(app) {
       const token = createToken()
 
       const result = db.transaction(() => {
-        const session = createSession(db, {
-          code: allocateCode(db),
-          name: name.trim(),
-          passphraseHash,
-        })
+        const session = createSession(db, { name: name.trim(), passphraseHash })
         const member = createMember(db, {
           sessionId: session.id,
           tokenHash: hashToken(token),
@@ -79,7 +75,7 @@ export default async function sessionRoutes(app) {
         return { session, member }
       })()
 
-      request.log.info({ code: result.session.code }, 'room created')
+      request.log.info({ room: result.session.url_id }, 'room created')
 
       return reply.code(201).send({
         token,
@@ -90,36 +86,60 @@ export default async function sessionRoutes(app) {
   )
 
   /**
-   * Joins an existing room. Rate limited per code: a 4-letter code is
-   * brute-forceable, and this makes enumeration boring.
+   * Resolves a custom link to the room it points at. A slug is somebody's
+   * chosen name and therefore guessable, which is exactly why a room may only
+   * have one once it has a passphrase — so this reveals nothing that gets you in.
+   */
+  app.get(
+    '/api/sessions/c/:slug',
+    {
+      config: {
+        rateLimit: {
+          max: 30,
+          timeWindow: '1 minute',
+          keyGenerator: (request) => 'slug:' + normalizeSlug(request.params.slug),
+        },
+      },
+    },
+    async (request, reply) => {
+      const session = findSessionBySlug(db, request.params.slug)
+      if (!session) return reply.code(404).send({ error: 'room_not_found' })
+      return reply.send({ urlId: session.url_id })
+    },
+  )
+
+  /**
+   * Joins an existing room. Rate limited per room, because a link that gets
+   * pasted around should not also be a place to grind passphrases.
    */
   app.post(
-    '/api/sessions/:code/join',
+    '/api/sessions/:urlId/join',
     {
       schema: {
         body: joinBody,
-        params: { type: 'object', properties: { code: { type: 'string', maxLength: 12 } } },
+        params: { type: 'object', properties: { urlId: { type: 'string', maxLength: 32 } } },
       },
       config: {
         rateLimit: {
           max: 20,
           timeWindow: '1 minute',
-          keyGenerator: (request) => `join:${normalizeCode(request.params.code)}`,
+          keyGenerator: (request) => 'join:' + normalizeUrlId(request.params.urlId),
         },
       },
     },
     async (request, reply) => {
-      const code = normalizeCode(request.params.code)
+      const urlId = normalizeUrlId(request.params.urlId)
       const { displayName = '', passphrase, restore = false } = request.body ?? {}
 
-      if (!isValidCode(code)) {
+      if (!isValidUrlId(urlId)) {
         return reply.code(404).send({ error: 'room_not_found' })
       }
 
-      const session = findSessionByCode(db, code)
+      const session = findSessionByUrlId(db, urlId)
       if (!session) {
         return reply.code(404).send({ error: 'room_not_found' })
       }
+
       // A closed room says so plainly, and reopening has to be asked for.
       if (session.archived_at && !restore) {
         return reply.code(410).send({ error: 'room_closed' })
@@ -161,7 +181,7 @@ export default async function sessionRoutes(app) {
       })()
 
       // Re-read so the response does not still claim the room is closed.
-      const fresh = findSessionByCode(db, code)
+      const fresh = findSessionByUrlId(db, urlId)
 
       // A member with no character is the normal state right after joining.
       return reply.code(200).send({
@@ -174,7 +194,7 @@ export default async function sessionRoutes(app) {
     },
   )
 
-  /** Resumes a stored token on page load. Works even if the room is locked. */
+  /** Resumes a stored token on page load. Works even on a locked room. */
   app.get('/api/session', async (request, reply) => {
     const token = bearerFrom(request)
     if (!token) return reply.code(401).send({ error: 'token_required' })

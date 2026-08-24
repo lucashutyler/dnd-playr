@@ -1,4 +1,5 @@
 import { computed, readonly, ref } from 'vue'
+import { roomUrl, routeFromPath, showLanding, showRoom } from '../room-url.js'
 
 /**
  * The one composable that owns session state. Components read from it and call
@@ -9,7 +10,12 @@ import { computed, readonly, ref } from 'vue'
  * always wins. There is no merge logic here and there should never be any.
  */
 
-const TOKEN_KEY = 'dnd-playr.token'
+// One seat per room, remembered per device. Keyed by the room's link id so
+// that opening somebody else's link does not resume the room you were last in.
+const TOKENS_KEY = 'dnd-playr.tokens'
+const LAST_KEY = 'dnd-playr.last'
+// Before rooms had links there was a single token. Upgrade it once, quietly.
+const LEGACY_TOKEN_KEY = 'dnd-playr.token'
 
 const RETRY_BASE_MS = 500
 const RETRY_MAX_MS = 15_000
@@ -25,7 +31,9 @@ const RECONNECT_BADGE_DELAY_MS = 3_000
 const TOAST_MS = 6_000
 
 // Module scope on purpose: one session per tab, shared by every component.
-const token = ref(readStoredToken())
+const token = ref(null)
+// A room the address bar asked for that we hold no seat in yet.
+const pendingRoom = ref(null)
 const session = ref(null)
 const member = ref(null)
 const members = ref([])
@@ -48,27 +56,61 @@ let intentSeq = 0
 // Intents we sent that are still waiting on an ack, and what to say if it lands.
 const awaiting = new Map()
 
-function readStoredToken() {
+function readStore(key, fallback) {
   try {
-    return localStorage.getItem(TOKEN_KEY)
+    const raw = localStorage.getItem(key)
+    return raw ? JSON.parse(raw) : fallback
   } catch {
-    // Private browsing with storage disabled. The session just will not resume.
+    // Private browsing with storage disabled, or something else wrote junk
+    // here. Either way the session just will not resume.
+    return fallback
+  }
+}
+
+function writeStore(key, value) {
+  try {
+    if (value === null) localStorage.removeItem(key)
+    else localStorage.setItem(key, JSON.stringify(value))
+  } catch {
+    /* not fatal */
+  }
+}
+
+const seats = () => readStore(TOKENS_KEY, {})
+const lastRoom = () => readStore(LAST_KEY, null)
+
+function tokenFor(urlId) {
+  return urlId ? (seats()[urlId] ?? null) : null
+}
+
+function rememberSeat(urlId, value) {
+  const next = { ...seats() }
+  if (value) next[urlId] = value
+  else delete next[urlId]
+
+  writeStore(TOKENS_KEY, next)
+  writeStore(LAST_KEY, value ? urlId : null)
+  token.value = value
+}
+
+/** Carries a pre-links token across, so a playtest device is not logged out. */
+function legacyToken() {
+  try {
+    return localStorage.getItem(LEGACY_TOKEN_KEY)
+  } catch {
     return null
   }
 }
 
-function storeToken(value) {
-  token.value = value
+function dropLegacyToken() {
   try {
-    if (value) localStorage.setItem(TOKEN_KEY, value)
-    else localStorage.removeItem(TOKEN_KEY)
+    localStorage.removeItem(LEGACY_TOKEN_KEY)
   } catch {
     /* not fatal */
   }
 }
 
 const MESSAGES = {
-  room_not_found: 'No room with that code.',
   room_locked: 'That room is locked.',
   passphrase_invalid: 'That passphrase does not match.',
   passphrase_required: 'This room needs a passphrase.',
@@ -78,6 +120,11 @@ const MESSAGES = {
   name_too_long: 'That name is too long.',
   passphrase_too_short: 'A passphrase needs at least four characters.',
   room_closed: 'That room is closed.',
+  room_not_found: 'No room at that link.',
+  slug_taken: 'Somebody already has that name.',
+  slug_reserved: 'That name is spoken for.',
+  slug_invalid: 'Letters, numbers and hyphens, three to thirty-two characters.',
+  slug_needs_passphrase: 'A custom link needs a passphrase on the room first.',
   no_change: 'Nothing to change there.',
   nothing_to_undo: 'Nothing left to undo.',
   too_many_characters: 'This room is full of characters.',
@@ -115,6 +162,8 @@ function socketUrl() {
 /** The snapshot replaces local state wholesale. Unconditionally. */
 function applySnapshot(next) {
   session.value = next.session
+  // Claiming or releasing a custom link changes what this room's URL is.
+  showRoom(next.session)
   members.value = next.members
   characters.value = next.characters
   enemies.value = next.enemies
@@ -262,31 +311,74 @@ function undoLast() {
 
 /* ---------------------------------------------------------------- actions -- */
 
-function adopt(payload) {
+function adopt(payload, seatToken) {
   session.value = payload.session
   member.value = payload.member
   members.value = []
   status.value = 'ready'
   error.value = null
   needsPassphrase.value = false
+  pendingRoom.value = null
+
+  if (seatToken) rememberSeat(payload.session.urlId, seatToken)
+  // The address bar follows the room, so a refresh or a share lands here again.
+  showRoom(payload.session)
   connect()
 }
 
-/** Restores a stored token on load. Silent: a stale token is not an error. */
-async function resume() {
-  if (!token.value) return false
-
-  status.value = 'loading'
+/** Turns a custom link into the room it points at. */
+async function resolveSlug(slug) {
   try {
-    const { ok, payload } = await api('/api/session', { auth: token.value })
+    const { ok, payload } = await api('/api/sessions/c/' + encodeURIComponent(slug))
+    return ok ? payload.urlId : null
+  } catch {
+    return null
+  }
+}
+
+/**
+ * Works out which room this load is for and whether we already have a seat.
+ *
+ * A link in the address bar wins over whatever this device was last in — that
+ * is the whole point of being sent one. If we hold no seat there, the room is
+ * remembered as pending so the landing screen can offer to join it rather than
+ * making somebody retype what they just clicked.
+ */
+async function resume() {
+  status.value = 'loading'
+
+  const route = routeFromPath()
+  let wanted = route?.kind === 'url' ? route.key : null
+  if (route?.kind === 'slug') wanted = await resolveSlug(route.key)
+
+  const urlId = wanted ?? lastRoom()
+  let seat = tokenFor(urlId)
+
+  // One-time upgrade from the single token that predates room links.
+  const legacy = !seat && !wanted ? legacyToken() : null
+  if (legacy) seat = legacy
+
+  if (!seat) {
+    pendingRoom.value = wanted
+    status.value = 'idle'
+    return false
+  }
+
+  try {
+    const { ok, payload } = await api('/api/session', { auth: seat })
     if (ok) {
-      adopt(payload)
+      adopt(payload, seat)
+      if (legacy) dropLegacyToken()
       return true
     }
-    storeToken(null)
+    // A dead token for this room, not for every room.
+    if (urlId) rememberSeat(urlId, null)
+    if (legacy) dropLegacyToken()
+    pendingRoom.value = wanted
   } catch {
     error.value = 'Could not reach the server.'
   }
+
   status.value = 'idle'
   return false
 }
@@ -305,8 +397,7 @@ async function createRoom({ name = '', displayName = '', passphrase = '' } = {})
       status.value = 'idle'
       return false
     }
-    storeToken(payload.token)
-    adopt(payload)
+    adopt(payload, payload.token)
     return true
   } catch {
     error.value = 'Could not reach the server.'
@@ -315,7 +406,7 @@ async function createRoom({ name = '', displayName = '', passphrase = '' } = {})
   }
 }
 
-async function joinRoom({ code, displayName = '', passphrase = '', restore = false } = {}) {
+async function joinRoom({ room, displayName = '', passphrase = '', restore = false } = {}) {
   status.value = 'loading'
   error.value = null
 
@@ -324,7 +415,15 @@ async function joinRoom({ code, displayName = '', passphrase = '', restore = fal
   if (restore) body.restore = true
 
   try {
-    const url = '/api/sessions/' + encodeURIComponent(code.trim().toUpperCase()) + '/join'
+    // A custom link has to be resolved before it can be joined.
+    const urlId = room?.kind === 'slug' ? await resolveSlug(room.key) : room?.key
+    if (!urlId) {
+      error.value = messageFor('room_not_found')
+      status.value = 'idle'
+      return false
+    }
+
+    const url = '/api/sessions/' + encodeURIComponent(urlId) + '/join'
     const { ok, payload } = await api(url, { method: 'POST', body })
 
     if (!ok) {
@@ -334,7 +433,7 @@ async function joinRoom({ code, displayName = '', passphrase = '', restore = fal
         error.value = null
       } else if (payload.error === 'room_closed') {
         // Reopening is offered rather than done, so nobody does it by accident.
-        closedRoom.value = code.trim().toUpperCase()
+        closedRoom.value = urlId
         error.value = null
       } else {
         if (payload.error === 'passphrase_invalid') needsPassphrase.value = true
@@ -344,9 +443,8 @@ async function joinRoom({ code, displayName = '', passphrase = '', restore = fal
       return false
     }
 
-    storeToken(payload.token)
     closedRoom.value = null
-    adopt(payload)
+    adopt(payload, payload.token)
     return true
   } catch {
     error.value = 'Could not reach the server.'
@@ -359,7 +457,9 @@ async function joinRoom({ code, displayName = '', passphrase = '', restore = fal
 function leave() {
   disconnect()
   dismissToast()
-  storeToken(null)
+  // Only this room's seat. Other rooms on this device are none of its business.
+  if (session.value?.urlId) rememberSeat(session.value.urlId, null)
+  showLanding()
   session.value = null
   member.value = null
   members.value = []
@@ -369,6 +469,7 @@ function leave() {
   error.value = null
   needsPassphrase.value = false
   closedRoom.value = null
+  pendingRoom.value = null
 }
 
 function clearError() {
@@ -426,6 +527,8 @@ const setLocked = (locked) =>
   sendIntent({ type: 'session.lock', locked }, locked ? 'Locked the room' : 'Unlocked the room')
 const setArchived = (archived) =>
   sendIntent({ type: 'session.archive', archived }, archived ? 'Closed the room' : null)
+const setSlug = (slug) =>
+  sendIntent({ type: 'session.slug', slug }, slug ? 'Claimed a custom link' : 'Released the link')
 
 export function useSession() {
   return {
@@ -439,6 +542,7 @@ export function useSession() {
     error: readonly(error),
     needsPassphrase: readonly(needsPassphrase),
     closedRoom: readonly(closedRoom),
+    pendingRoom: readonly(pendingRoom),
     toast: readonly(toast),
 
     inRoom: computed(() => Boolean(session.value)),
@@ -482,6 +586,10 @@ export function useSession() {
     setPassphrase,
     setLocked,
     setArchived,
+    setSlug,
+
+    /** The link to share, custom name if there is one. */
+    shareUrl: computed(() => (session.value ? roomUrl(session.value) : '')),
 
     /** Who dealt a hit. Members are never deleted, so this always resolves. */
     memberName: (id) => members.value.find((m) => m.id === id)?.displayName || 'Someone',

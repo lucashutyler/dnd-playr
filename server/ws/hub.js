@@ -122,8 +122,8 @@ export function createHub({ db, log, presenceGraceMs = PRESENCE_GRACE_MS } = {})
       // The server holds identity. Nothing on the wire carries a member id.
       ws.member = found.member
       ws.sessionId = found.session.id
-      // For logging. The code identifies a room; the token never gets near a log.
-      ws.sessionCode = found.session.code
+      // For logging. The link id identifies a room; the token never gets near a log.
+      ws.room = found.session.url_id
       wss.emit('connection', ws, request)
     })
   }
@@ -153,7 +153,7 @@ export function createHub({ db, log, presenceGraceMs = PRESENCE_GRACE_MS } = {})
     // Counted before the handler is even looked up: a flood of intents we would
     // have rejected anyway should still run the sender out of budget.
     if (!withinRate(socket)) {
-      log?.warn?.({ code: socket.sessionCode, memberId: socket.member.id }, 'socket rate limited')
+      log?.warn?.({ room: socket.room, memberId: socket.member.id }, 'socket rate limited')
       return fail(socket, intentId, 'rate_limited')
     }
 
@@ -208,7 +208,7 @@ export function createHub({ db, log, presenceGraceMs = PRESENCE_GRACE_MS } = {})
       return fail(socket, intentId, 'intent_failed')
     }
 
-    log?.debug?.({ code: session.code, memberId: member.id, type }, 'intent applied')
+    log?.debug?.({ room: session.url_id, memberId: member.id, type }, 'intent applied')
 
     if (intentId) send(socket, { type: 'ack', id: intentId })
     broadcast(session.id)
@@ -227,7 +227,7 @@ export function createHub({ db, log, presenceGraceMs = PRESENCE_GRACE_MS } = {})
 
     touchMember(db, socket.member.id)
     log?.info?.(
-      { code: socket.sessionCode, memberId: socket.member.id, sockets: wss.clients.size },
+      { room: socket.room, memberId: socket.member.id, sockets: wss.clients.size },
       'socket open',
     )
     // Everyone gets one, including the newcomer: presence just changed.
@@ -252,7 +252,7 @@ export function createHub({ db, log, presenceGraceMs = PRESENCE_GRACE_MS } = {})
       if (sockets.size === 0) rooms.delete(socket.sessionId)
       else broadcast(socket.sessionId)
 
-      log?.info?.({ code: socket.sessionCode, memberId: socket.member.id }, 'socket closed')
+      log?.info?.({ room: socket.room, memberId: socket.member.id }, 'socket closed')
     })
   })
 

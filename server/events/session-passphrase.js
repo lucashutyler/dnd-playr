@@ -1,4 +1,5 @@
 import { hashPassphrase } from '../auth/tokens.js'
+import { IntentError } from '../errors.js'
 
 const MIN = 4
 const MAX = 200
@@ -31,6 +32,10 @@ export default {
   },
 
   apply({ db, session, prepared }) {
+    // A custom link is guessable by design, so it may not outlive the
+    // passphrase that is actually protecting the room.
+    if (!prepared.hash && session.slug) throw new IntentError('slug_needs_passphrase')
+
     db.prepare('UPDATE sessions SET passphrase_hash = ?, updated_at = ? WHERE id = ?').run(
       prepared.hash,
       new Date().toISOString(),

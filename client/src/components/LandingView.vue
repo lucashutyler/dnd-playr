@@ -1,10 +1,12 @@
 <script setup>
-import { ref, watch } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import AppButton from './AppButton.vue'
 import AppField from './AppField.vue'
+import { parseRoomInput } from '../room-url.js'
 import { useSession } from '../composables/useSession.js'
 
-const { busy, error, needsPassphrase, closedRoom, createRoom, joinRoom, clearError } = useSession()
+const { busy, error, needsPassphrase, closedRoom, pendingRoom, createRoom, joinRoom, clearError } =
+  useSession()
 
 // 'menu' | 'create' | 'join'
 const mode = ref('menu')
@@ -12,7 +14,19 @@ const mode = ref('menu')
 const roomName = ref('')
 const displayName = ref('')
 const passphrase = ref('')
-const code = ref('')
+const roomInput = ref('')
+
+// A bare id, a custom name, or the whole link somebody pasted.
+const target = computed(() => parseRoomInput(roomInput.value))
+
+onMounted(() => {
+  // Arrived on a room link we have no seat in: skip the menu and fill it in,
+  // so nobody has to retype the thing they just tapped.
+  if (pendingRoom.value) {
+    roomInput.value = pendingRoom.value
+    mode.value = 'join'
+  }
+})
 
 function show(next) {
   mode.value = next
@@ -25,7 +39,7 @@ function back() {
   clearError()
 }
 
-watch(code, clearError)
+watch(roomInput, clearError)
 
 async function submitCreate() {
   await createRoom({
@@ -36,8 +50,9 @@ async function submitCreate() {
 }
 
 async function submitJoin(restore) {
+  if (!target.value) return
   await joinRoom({
-    code: code.value,
+    room: target.value,
     displayName: displayName.value,
     passphrase: passphrase.value,
     // Strict, because a submit handler is called with the Event. Anything but
@@ -85,12 +100,11 @@ async function submitJoin(restore) {
 
       <form v-else class="stack" @submit.prevent="submitJoin()">
         <AppField
-          v-model="code"
-          label="Room code"
-          placeholder="KTZP"
-          code
-          :maxlength="6"
-          hint="Four letters, from whoever made the room."
+          v-model="roomInput"
+          label="Room link"
+          placeholder="k7m3qp"
+          :maxlength="120"
+          hint="Paste the whole link, or just the bit on the end."
         />
         <AppField v-model="displayName" label="Your name" placeholder="Sam" :maxlength="40" />
         <AppField
@@ -104,14 +118,14 @@ async function submitJoin(restore) {
         />
         <p v-if="error" class="error" role="alert">{{ error }}</p>
 
-        <div v-if="closedRoom === code.trim().toUpperCase()" class="closed">
+        <div v-if="closedRoom && target" class="closed">
           <p>That room is closed. Reopening it puts everything back exactly as it was.</p>
           <AppButton variant="primary" :disabled="busy" @click="submitJoin(true)">
             Reopen and join
           </AppButton>
         </div>
 
-        <AppButton v-else variant="primary" type="submit" :disabled="busy || code.length < 4">
+        <AppButton v-else variant="primary" type="submit" :disabled="busy || !target">
           {{ busy ? 'Joining...' : 'Join' }}
         </AppButton>
         <AppButton variant="ghost" @click="back">Back</AppButton>

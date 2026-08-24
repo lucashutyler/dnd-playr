@@ -21,6 +21,7 @@ import enemyRemove from './enemy-remove.js'
 import enemyReorder from './enemy-reorder.js'
 import encounterNew from './encounter-new.js'
 import sessionPassphrase from './session-passphrase.js'
+import sessionSlug from './session-slug.js'
 import sessionLock from './session-lock.js'
 import sessionArchive from './session-archive.js'
 import historyUndo from './history-undo.js'
@@ -54,6 +55,7 @@ const handlers = [
   enemyReorder,
   encounterNew,
   sessionPassphrase,
+  sessionSlug,
   sessionLock,
   sessionArchive,
   historyUndo,

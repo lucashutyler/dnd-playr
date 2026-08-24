@@ -11,7 +11,7 @@ let robin
 
 beforeEach(() => {
   db = openDatabase(':memory:')
-  session = createSession(db, { code: 'TEST', name: 'Tuesday Night' })
+  session = createSession(db, { name: 'Tuesday Night' })
   sam = createMember(db, { sessionId: session.id, tokenHash: 'sam', displayName: 'Sam' })
   robin = createMember(db, { sessionId: session.id, tokenHash: 'robin', displayName: 'Robin' })
 })

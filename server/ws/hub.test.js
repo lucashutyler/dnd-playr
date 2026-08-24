@@ -27,7 +27,7 @@ describe('upgrade', () => {
     const { client, first } = await connected(room.token)
 
     expect(first.type).toBe('snapshot')
-    expect(first.snapshot.session.code).toBe(room.session.code)
+    expect(first.snapshot.session.urlId).toBe(room.session.urlId)
     expect(first.snapshot.session.name).toBe('Tuesday Night')
     expect(first.snapshot.members).toHaveLength(1)
     expect(first.snapshot.characters).toEqual([])
@@ -68,7 +68,7 @@ describe('intents', () => {
     const joined = await ctx.app
       .inject({
         method: 'POST',
-        url: `/api/sessions/${room.session.code}/join`,
+        url: `/api/sessions/${room.session.urlId}/join`,
         payload: { displayName: 'Robin' },
       })
       .then((r) => r.json())
@@ -143,7 +143,7 @@ describe('shutdown', () => {
   it('lets go promptly even with sockets still attached', async () => {
     const room = await createRoom(ctx.app)
     const joined = await ctx.app
-      .inject({ method: 'POST', url: `/api/sessions/${room.session.code}/join`, payload: {} })
+      .inject({ method: 'POST', url: `/api/sessions/${room.session.urlId}/join`, payload: {} })
       .then((r) => r.json())
 
     // Deliberately never closed from this side: a phone that walked out of
@@ -206,7 +206,7 @@ describe('presence', () => {
   async function twoSeats() {
     const room = await createRoom(ctx.app)
     const joined = await ctx.app
-      .inject({ method: 'POST', url: `/api/sessions/${room.session.code}/join`, payload: {} })
+      .inject({ method: 'POST', url: `/api/sessions/${room.session.urlId}/join`, payload: {} })
       .then((r) => r.json())
     return { room, joined }
   }
@@ -313,9 +313,9 @@ describe('reconnect and resume', () => {
 
     // The registry lets go of a closed socket rather than leaking it.
     const sessionId = ctx.db
-      .prepare('SELECT id FROM sessions WHERE code = ?')
+      .prepare('SELECT id FROM sessions WHERE url_id = ?')
       .pluck()
-      .get(room.session.code)
+      .get(room.session.urlId)
     for (let i = 0; ctx.app.hub.countSockets(sessionId) > 0 && i < 50; i += 1) {
       await new Promise((r) => setTimeout(r, 10))
     }

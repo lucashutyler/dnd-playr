@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto'
+import { allocateUrlId } from './url-id.js'
 
 const now = () => new Date().toISOString()
 
@@ -8,7 +9,9 @@ const now = () => new Date().toISOString()
  */
 export function publicSession(session, { memberCount = 0 } = {}) {
   return {
-    code: session.code,
+    // A room is its link. There is no second identifier to keep in step.
+    urlId: session.url_id,
+    slug: session.slug ?? null,
     name: session.name,
     locked: Boolean(session.locked),
     archived: Boolean(session.archived_at),
@@ -26,11 +29,12 @@ export function publicMember(member) {
   }
 }
 
-export function createSession(db, { code, name = '', passphraseHash = null }) {
+export function createSession(db, { urlId, name = '', passphraseHash = null }) {
   const at = now()
   const session = {
     id: randomUUID(),
-    code,
+    url_id: urlId ?? allocateUrlId(db),
+    slug: null,
     name,
     passphrase_hash: passphraseHash,
     locked: 0,
@@ -38,14 +42,14 @@ export function createSession(db, { code, name = '', passphraseHash = null }) {
     updated_at: at,
   }
   db.prepare(
-    `INSERT INTO sessions (id, code, name, passphrase_hash, locked, created_at, updated_at)
-     VALUES (@id, @code, @name, @passphrase_hash, @locked, @created_at, @updated_at)`,
+    `INSERT INTO sessions (id, url_id, slug, name, passphrase_hash, locked, created_at, updated_at)
+     VALUES (@id, @url_id, @slug, @name, @passphrase_hash, @locked, @created_at, @updated_at)`,
   ).run(session)
   return session
 }
 
-export function findSessionByCode(db, code) {
-  return db.prepare('SELECT * FROM sessions WHERE code = ?').get(code) ?? null
+export function findSessionByUrlId(db, urlId) {
+  return db.prepare('SELECT * FROM sessions WHERE url_id = ?').get(urlId) ?? null
 }
 
 export function createMember(db, { sessionId, tokenHash, displayName = '' }) {

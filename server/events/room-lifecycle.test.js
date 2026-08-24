@@ -12,7 +12,7 @@ let member
 
 beforeEach(() => {
   db = openDatabase(':memory:')
-  session = createSession(db, { code: 'TEST', name: 'Tuesday Night' })
+  session = createSession(db, { name: 'Tuesday Night' })
   member = createMember(db, { sessionId: session.id, tokenHash: 'sam', displayName: 'Sam' })
 })
 
@@ -89,6 +89,83 @@ describe('session.passphrase', () => {
     )
     expect((await run('session.passphrase', {})).error).toBe('invalid_payload')
     expect((await run('session.passphrase', { passphrase: 12 })).error).toBe('invalid_payload')
+  })
+})
+
+describe('session.slug', () => {
+  it('will not take a custom link on a room with no passphrase', async () => {
+    // A name somebody chose is the first thing anyone would try, so it is only
+    // allowed once there is a passphrase actually holding the door.
+    expect((await run('session.slug', { slug: 'samsroom' })).error).toBe('slug_needs_passphrase')
+    expect(row().slug).toBeNull()
+  })
+
+  it('takes one once a passphrase is set', async () => {
+    await run('session.passphrase', { passphrase: 'dragons' })
+    await run('session.slug', { slug: 'SamsRoom' })
+
+    // Stored lowercase, so the link is the link however it was typed.
+    expect(row().slug).toBe('samsroom')
+    expect(snap().session.slug).toBe('samsroom')
+  })
+
+  it('will not take one somebody else already has', async () => {
+    await run('session.passphrase', { passphrase: 'dragons' })
+    await run('session.slug', { slug: 'samsroom' })
+
+    const other = createSession(db, { name: 'Another table' })
+    const otherMember = createMember(db, { sessionId: other.id, tokenHash: 'other' })
+    const handler = findHandler('session.slug')
+
+    db.prepare('UPDATE sessions SET passphrase_hash = ? WHERE id = ?').run('x', other.id)
+    const fresh = db.prepare('SELECT * FROM sessions WHERE id = ?').get(other.id)
+
+    expect(() =>
+      handler.apply({ db, session: fresh, member: otherMember, payload: { slug: 'samsroom' } }),
+    ).toThrow(/slug_taken/)
+  })
+
+  it('leaves a room free to keep its own link', async () => {
+    await run('session.passphrase', { passphrase: 'dragons' })
+    await run('session.slug', { slug: 'samsroom' })
+    // Re-claiming the same one is not a collision with itself.
+    expect((await run('session.slug', { slug: 'samsroom' })).error).toBeUndefined()
+  })
+
+  it('refuses names that would collide with the app or read as broken', async () => {
+    await run('session.passphrase', { passphrase: 'dragons' })
+
+    for (const reserved of ['api', 'ws', 'room', 'c', 'assets']) {
+      expect((await run('session.slug', { slug: reserved })).error).toBe('slug_reserved')
+    }
+    for (const bad of ['ab', '-nope', 'nope-', 'two--hyphens', 'Spaces Here', 'punct!']) {
+      expect((await run('session.slug', { slug: bad })).error).toBe('slug_invalid')
+    }
+  })
+
+  it('releases with null, and can be taken back', async () => {
+    await run('session.passphrase', { passphrase: 'dragons' })
+    await run('session.slug', { slug: 'samsroom' })
+
+    await run('session.slug', { slug: null })
+    expect(row().slug).toBeNull()
+
+    await undo()
+    expect(row().slug).toBe('samsroom')
+  })
+
+  it('will not let the passphrase be cleared while a custom link depends on it', async () => {
+    await run('session.passphrase', { passphrase: 'dragons' })
+    await run('session.slug', { slug: 'samsroom' })
+
+    expect((await run('session.passphrase', { passphrase: null })).error).toBe(
+      'slug_needs_passphrase',
+    )
+    expect(row().passphrase_hash).toBeTruthy()
+
+    // Dropping the link first is the way out.
+    await run('session.slug', { slug: null })
+    expect((await run('session.passphrase', { passphrase: null })).error).toBeUndefined()
   })
 })
 

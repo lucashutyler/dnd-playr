@@ -10,7 +10,7 @@ let member
 
 beforeEach(() => {
   db = openDatabase(':memory:')
-  session = createSession(db, { code: 'TEST', name: 'Tuesday Night' })
+  session = createSession(db, { name: 'Tuesday Night' })
   member = createMember(db, { sessionId: session.id, tokenHash: 'hash', displayName: 'Sam' })
 })
 
@@ -85,7 +85,7 @@ describe('claiming', () => {
   })
 
   it('will not claim a character from another room', () => {
-    const elsewhere = createSession(db, { code: 'OTHR' })
+    const elsewhere = createSession(db, {})
     const handler = findHandler('character.create')
     const strangerMember = createMember(db, { sessionId: elsewhere.id, tokenHash: 'x' })
     const made = handler.apply({

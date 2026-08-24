@@ -13,6 +13,12 @@ const booted = ref(false)
 onMounted(async () => {
   await resume()
   booted.value = true
+
+  // Everything in here navigates with replaceState, so this mostly fires when
+  // somebody edits the address bar. Re-deriving is cheaper than guessing.
+  window.addEventListener('popstate', () => {
+    resume()
+  })
 })
 </script>
 
