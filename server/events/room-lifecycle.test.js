@@ -169,6 +169,70 @@ describe('session.slug', () => {
   })
 })
 
+describe('a room has three separate things', () => {
+  // The name is what the table calls itself. The link id is generated. The
+  // custom link is a name for the URL. None of them is derived from another,
+  // and changing one must never move the others.
+  it('keeps the display name clear of both links', async () => {
+    await run('session.rename', { name: 'Awesome D&D Party' })
+    await run('session.passphrase', { passphrase: 'dragons' })
+    await run('session.slug', { slug: 'mycustomlink' })
+
+    const after = row()
+    expect(after.name).toBe('Awesome D&D Party')
+    expect(after.slug).toBe('mycustomlink')
+    // Generated, and nothing to do with either.
+    expect(after.url_id).not.toBe('mycustomlink')
+    expect(after.url_id).not.toContain('awesome')
+    expect(after.url_id).toMatch(/^[a-z0-9]{4,16}$/)
+
+    const shown = snap().session
+    expect(shown).toMatchObject({
+      name: 'Awesome D&D Party',
+      slug: 'mycustomlink',
+      urlId: after.url_id,
+    })
+  })
+
+  it('renaming the room leaves both links alone', async () => {
+    await run('session.passphrase', { passphrase: 'dragons' })
+    await run('session.slug', { slug: 'mycustomlink' })
+    const before = row()
+
+    await run('session.rename', { name: 'Completely Different Party' })
+
+    const after = row()
+    expect(after.name).toBe('Completely Different Party')
+    expect(after.slug).toBe(before.slug)
+    expect(after.url_id).toBe(before.url_id)
+  })
+
+  it('claiming or releasing a custom link leaves the name alone', async () => {
+    await run('session.rename', { name: 'Awesome D&D Party' })
+    await run('session.passphrase', { passphrase: 'dragons' })
+    const urlId = row().url_id
+
+    await run('session.slug', { slug: 'mycustomlink' })
+    expect(row().name).toBe('Awesome D&D Party')
+
+    await run('session.slug', { slug: 'somethingelse' })
+    expect(row().name).toBe('Awesome D&D Party')
+
+    await run('session.slug', { slug: null })
+    expect(row()).toMatchObject({ name: 'Awesome D&D Party', slug: null, url_id: urlId })
+  })
+
+  it('lets two rooms share a display name, which links can never do', async () => {
+    await run('session.rename', { name: 'Awesome D&D Party' })
+
+    // A name is a label, not an identifier. Nothing stops another table
+    // picking the same one.
+    const other = createSession(db, { name: 'Awesome D&D Party' })
+    expect(other.name).toBe(row().name)
+    expect(other.url_id).not.toBe(row().url_id)
+  })
+})
+
 describe('session.lock', () => {
   it('locks and unlocks, and shows up in the snapshot', async () => {
     await run('session.lock', { locked: true })

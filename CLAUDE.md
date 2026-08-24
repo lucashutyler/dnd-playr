@@ -79,6 +79,12 @@ SQLite, in `server/db/schema.sql`. Roughly:
 
 - `sessions` — id, `url_id` (the link), `slug` (nullable alias), name,
   `passphrase_hash` (nullable), `locked`, `archived_at`, timestamps
+
+  These are **three separate things** and none is derived from another: `name` is what
+  the table calls itself and is free text that two rooms may share, `url_id` is
+  generated, and `slug` names the URL. Renaming a room must never move a link, and
+  claiming a link must never touch the name. Tests hold this.
+
 - `members` — id, session_id, `token_hash`, `character_id` (nullable), display_name, last_seen
 - `characters` — id, session_id, name, class, level, hp_current, hp_max, hp_temp, ac,
   death saves, `conditions` (json), `notes`
