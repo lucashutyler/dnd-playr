@@ -102,7 +102,7 @@ export default async function sessionRoutes(app) {
       },
     },
     async (request, reply) => {
-      const session = findSessionBySlug(db, request.params.slug)
+      const session = findSessionBySlug(db, normalizeSlug(request.params.slug))
       if (!session) return reply.code(404).send({ error: 'room_not_found' })
       return reply.send({ urlId: session.url_id })
     },
@@ -128,17 +128,20 @@ export default async function sessionRoutes(app) {
       },
     },
     async (request, reply) => {
-      const urlId = normalizeUrlId(request.params.urlId)
+      const key = normalizeUrlId(request.params.urlId)
       const { displayName = '', passphrase, restore = false } = request.body ?? {}
 
-      if (!isValidUrlId(urlId)) {
-        return reply.code(404).send({ error: 'room_not_found' })
-      }
+      // A custom name of plain letters is indistinguishable from a link id by
+      // shape alone, so the server tries both rather than making the client
+      // guess which namespace somebody typed into.
+      const session = isValidUrlId(key)
+        ? (findSessionByUrlId(db, key) ?? findSessionBySlug(db, key))
+        : findSessionBySlug(db, key)
 
-      const session = findSessionByUrlId(db, urlId)
       if (!session) {
         return reply.code(404).send({ error: 'room_not_found' })
       }
+      const urlId = session.url_id
 
       // A closed room says so plainly, and reopening has to be asked for.
       if (session.archived_at && !restore) {

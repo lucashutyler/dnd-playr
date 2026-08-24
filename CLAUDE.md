@@ -156,6 +156,13 @@ shared timestamp is what groups a set of enemies into one encounter afterwards.
   message mid-combat. A wedged, half-faded toast over the controls is worse than no
   animation at all.
 - Tab panels are `v-show`, not `v-if`. Unmounting throws away half-typed input.
+- **Whichever link somebody arrived on is the one they keep.** A room with a custom name
+  answers to both `/room/<url_id>` and `/room/c/<slug>`, and rewriting one into the other
+  is a redirect nobody asked for. `formFor()` in `client/src/room-url.js` is the whole
+  rule: the address bar changes only when the URL in it stops working, which happens when
+  a custom name is released out from under it — and once it has fallen back it stays
+  fallen back rather than springing to a reclaimed name. The share panel is where the
+  prettier link gets offered.
 - Colors, spacing, radii, and type scale come from custom properties. If you're writing a
   raw hex or a raw `px` in a component, you probably want a token.
 

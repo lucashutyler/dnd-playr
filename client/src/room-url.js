@@ -57,17 +57,34 @@ export function parseRoomInput(value) {
   return null
 }
 
-export function roomPath(session) {
-  return session?.slug ? CUSTOM + session.slug : ROOM + session.urlId
+/**
+ * Whichever form somebody arrived on is the form they keep.
+ *
+ * A room with a custom name answers to both links, and rewriting the address
+ * bar from one to the other is a redirect nobody asked for — the name you were
+ * given is the name you should still be looking at. `form` is the route this
+ * visit came in on; it is only ignored once it stops pointing at this room,
+ * which happens when a custom name is released out from under it.
+ */
+export function formFor(session, form = null) {
+  if (form?.kind === 'slug' && form.key === session?.slug) return form
+  if (form?.kind === 'url' && form.key === session?.urlId) return form
+
+  return session?.slug ? { kind: 'slug', key: session.slug } : { kind: 'url', key: session.urlId }
 }
 
-/** The absolute link to hand somebody, or put in a QR code. */
+export function roomPath(session, form = null) {
+  const used = formFor(session, form)
+  return used.kind === 'slug' ? CUSTOM + used.key : ROOM + used.key
+}
+
+/** The link to hand somebody: the pretty one, if this room has one. */
 export function roomUrl(session) {
   return new URL(roomPath(session), window.location.origin).toString()
 }
 
-export function showRoom(session) {
-  const next = roomPath(session)
+export function showRoom(session, form = null) {
+  const next = roomPath(session, form)
   if (window.location.pathname !== next) window.history.replaceState(null, '', next)
 }
 

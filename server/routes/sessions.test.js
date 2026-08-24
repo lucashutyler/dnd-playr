@@ -124,6 +124,58 @@ describe('POST /api/sessions/:urlId/join', () => {
   })
 })
 
+describe('joining by a custom name', () => {
+  const nameIt = (urlId, slug) =>
+    ctx.db.prepare('UPDATE sessions SET slug = ? WHERE url_id = ?').run(slug, urlId)
+
+  it('takes the name as readily as the link id', async () => {
+    const { session } = await createRoom(ctx.app, { passphrase: 'dragons' })
+    // Plain letters, so by shape alone this is indistinguishable from a link id.
+    nameIt(session.urlId, 'samsroom')
+
+    const byName = await post(joinUrl('samsroom'), { passphrase: 'dragons' })
+    expect(byName.statusCode).toBe(200)
+    expect(byName.json().session.urlId).toBe(session.urlId)
+
+    const byId = await post(joinUrl(session.urlId), { passphrase: 'dragons' })
+    expect(byId.statusCode).toBe(200)
+    expect(byId.json().session.slug).toBe('samsroom')
+  })
+
+  it('takes a name with hyphens, which no link id ever has', async () => {
+    const { session } = await createRoom(ctx.app, { passphrase: 'dragons' })
+    nameIt(session.urlId, 'sams-tuesday-game')
+
+    const res = await post(joinUrl('sams-tuesday-game'), { passphrase: 'dragons' })
+    expect(res.statusCode).toBe(200)
+    expect(res.json().session.urlId).toBe(session.urlId)
+  })
+
+  it('prefers the link id when a name somehow matches one', async () => {
+    const first = await createRoom(ctx.app)
+    const second = await createRoom(ctx.app)
+    // Contrived, but the tie has to break somewhere and it breaks toward the
+    // id, which is the thing nobody chose.
+    nameIt(second.session.urlId, first.session.urlId)
+
+    const res = await post(joinUrl(first.session.urlId), {})
+    expect(res.json().session.urlId).toBe(first.session.urlId)
+  })
+
+  it('resolves a name to its link id for the boot path', async () => {
+    const { session } = await createRoom(ctx.app, { passphrase: 'dragons' })
+    nameIt(session.urlId, 'samsroom')
+
+    const res = await ctx.app.inject({ method: 'GET', url: '/api/sessions/c/SamsRoom' })
+    expect(res.statusCode).toBe(200)
+    expect(res.json()).toEqual({ urlId: session.urlId })
+
+    expect(
+      (await ctx.app.inject({ method: 'GET', url: '/api/sessions/c/nobody' })).statusCode,
+    ).toBe(404)
+  })
+})
+
 describe('a closed room', () => {
   const close = (urlId) =>
     ctx.db.prepare('UPDATE sessions SET archived_at = ? WHERE url_id = ?').run('2026-01-01', urlId)

@@ -1,5 +1,5 @@
 import { computed, readonly, ref } from 'vue'
-import { roomUrl, routeFromPath, showLanding, showRoom } from '../room-url.js'
+import { formFor, roomUrl, routeFromPath, showLanding, showRoom } from '../room-url.js'
 
 /**
  * The one composable that owns session state. Components read from it and call
@@ -32,8 +32,11 @@ const TOAST_MS = 6_000
 
 // Module scope on purpose: one session per tab, shared by every component.
 const token = ref(null)
-// A room the address bar asked for that we hold no seat in yet.
+// The name of a room the address bar asked for that we hold no seat in yet,
+// spelled the way the visitor spelled it.
 const pendingRoom = ref(null)
+// Which form this visit came in on, so nothing rewrites the address bar.
+let addressForm = null
 const session = ref(null)
 const member = ref(null)
 const members = ref([])
@@ -162,8 +165,11 @@ function socketUrl() {
 /** The snapshot replaces local state wholesale. Unconditionally. */
 function applySnapshot(next) {
   session.value = next.session
-  // Claiming or releasing a custom link changes what this room's URL is.
-  showRoom(next.session)
+  // The address bar only ever changes when the URL somebody is on stops
+  // working — a custom name released out from under it. Once it has had to
+  // fall back, it stays fallen back rather than springing to a reclaimed name.
+  addressForm = formFor(next.session, addressForm)
+  showRoom(next.session, addressForm)
   members.value = next.members
   characters.value = next.characters
   enemies.value = next.enemies
@@ -311,7 +317,8 @@ function undoLast() {
 
 /* ---------------------------------------------------------------- actions -- */
 
-function adopt(payload, seatToken) {
+function adopt(payload, seatToken, form = null) {
+  addressForm = form ?? { kind: 'url', key: payload.session.urlId }
   session.value = payload.session
   member.value = payload.member
   members.value = []
@@ -321,8 +328,8 @@ function adopt(payload, seatToken) {
   pendingRoom.value = null
 
   if (seatToken) rememberSeat(payload.session.urlId, seatToken)
-  // The address bar follows the room, so a refresh or a share lands here again.
-  showRoom(payload.session)
+  // Puts the room in the address bar, in whichever form got us here.
+  showRoom(payload.session, addressForm)
   connect()
 }
 
@@ -349,6 +356,8 @@ async function resume() {
 
   const route = routeFromPath()
   let wanted = route?.kind === 'url' ? route.key : null
+  // A custom name is resolved behind the scenes. It is never swapped out for
+  // the id it points at — the name somebody used is the name they keep.
   if (route?.kind === 'slug') wanted = await resolveSlug(route.key)
 
   const urlId = wanted ?? lastRoom()
@@ -359,7 +368,8 @@ async function resume() {
   if (legacy) seat = legacy
 
   if (!seat) {
-    pendingRoom.value = wanted
+    // Offer the join with what they actually typed or were sent.
+    pendingRoom.value = route?.key ?? null
     status.value = 'idle'
     return false
   }
@@ -367,14 +377,14 @@ async function resume() {
   try {
     const { ok, payload } = await api('/api/session', { auth: seat })
     if (ok) {
-      adopt(payload, seat)
+      adopt(payload, seat, route)
       if (legacy) dropLegacyToken()
       return true
     }
     // A dead token for this room, not for every room.
     if (urlId) rememberSeat(urlId, null)
     if (legacy) dropLegacyToken()
-    pendingRoom.value = wanted
+    pendingRoom.value = route?.key ?? null
   } catch {
     error.value = 'Could not reach the server.'
   }
@@ -415,15 +425,16 @@ async function joinRoom({ room, displayName = '', passphrase = '', restore = fal
   if (restore) body.restore = true
 
   try {
-    // A custom link has to be resolved before it can be joined.
-    const urlId = room?.kind === 'slug' ? await resolveSlug(room.key) : room?.key
-    if (!urlId) {
+    // Sent as typed. A name and a link id can look identical, and only the
+    // server knows both namespaces well enough to say which this is.
+    const key = room?.key
+    if (!key) {
       error.value = messageFor('room_not_found')
       status.value = 'idle'
       return false
     }
 
-    const url = '/api/sessions/' + encodeURIComponent(urlId) + '/join'
+    const url = '/api/sessions/' + encodeURIComponent(key) + '/join'
     const { ok, payload } = await api(url, { method: 'POST', body })
 
     if (!ok) {
@@ -433,7 +444,7 @@ async function joinRoom({ room, displayName = '', passphrase = '', restore = fal
         error.value = null
       } else if (payload.error === 'room_closed') {
         // Reopening is offered rather than done, so nobody does it by accident.
-        closedRoom.value = urlId
+        closedRoom.value = key
         error.value = null
       } else {
         if (payload.error === 'passphrase_invalid') needsPassphrase.value = true
@@ -444,7 +455,8 @@ async function joinRoom({ room, displayName = '', passphrase = '', restore = fal
     }
 
     closedRoom.value = null
-    adopt(payload, payload.token)
+    // Joined by name? Then stay on the name.
+    adopt(payload, payload.token, room)
     return true
   } catch {
     error.value = 'Could not reach the server.'
@@ -457,6 +469,7 @@ async function joinRoom({ room, displayName = '', passphrase = '', restore = fal
 function leave() {
   disconnect()
   dismissToast()
+  addressForm = null
   // Only this room's seat. Other rooms on this device are none of its business.
   if (session.value?.urlId) rememberSeat(session.value.urlId, null)
   showLanding()

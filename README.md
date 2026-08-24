@@ -65,7 +65,8 @@ The boundary is the **room**, not the row:
   finds your room by guessing. The internal database id is never on the wire.
 - A room can also claim a **custom link** like `/room/c/samsroom` — but only once it has
   a passphrase. A name somebody picked is the first thing anyone would try, so the
-  pretty link is convenience and the passphrase is the actual door.
+  pretty link is convenience and the passphrase is the actual door. Both links work, and
+  whichever one you arrived on is the one you stay on.
 - A room can have an optional **passphrase**. Set it if you're playing somewhere public.
 - A room can be **locked** once everyone's in, so nobody else can join at all.
 - **Inside a room, everyone is equal.** Anyone can claim any character, add enemies, and

@@ -29,6 +29,13 @@ bookmarked, or returned to, and a stray back gesture lost it.
       stranding you on the form you passed through. Landing on a link you have no
       seat in fills the join box in for you
 - [x] The join box takes a pasted link, a custom name, or just the id
+- [x] Names are resolved, never redirected to. A room answers to both its generated
+      link and its custom name, and the address bar only changes when the URL in it
+      stops working. The join box echoes the name somebody was given rather than
+      swapping it for the id behind it
+- [x] The server disambiguates a name from a link id, because by shape they can be
+      identical — `samsroom` is eight lowercase characters and so is a link id. Only
+      the server knows both namespaces
 
 Codes were the Jackbox idea and they were the wrong shape here. Jackbox has a TV
 in the room to display one; a table has phones, and phones have cameras and
